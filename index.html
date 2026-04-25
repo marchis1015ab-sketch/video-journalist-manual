@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>야구 기록 관리 시스템</title>
-  <meta name="description" content="2022년부터 2026년까지 야구 기록을 입력, 누적, 통산, 순위로 관리하는 웹페이지">
+  <title>선수 시즌 누적 기록</title>
+  <meta name="description" content="2022년부터 2026년까지의 야구 기록을 엑셀형 UI로 관리하는 기록 시스템">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="app-header">
     <div class="title-block">
       <h1>선수 시즌 누적 기록</h1>
-      <p class="subtitle">2022년~2026년 타자·투수 기록 관리</p>
+      <p class="subtitle">2022년~2026년 타자·투수 기록</p>
     </div>
     <nav class="page-nav" aria-label="기록 페이지 이동">
       <div id="pageButtons" class="page-buttons"></div>
@@ -19,42 +19,93 @@
   </header>
 
   <main class="app-main">
-    <section class="entry-section" aria-labelledby="entryHeading">
-      <div class="section-head">
-        <h2 id="entryHeading">2026 기록 입력</h2>
-        <p id="statusMessage" class="status-message" aria-live="polite">2026 시즌은 입력 즉시 저장됩니다.</p>
+    <section class="entry-sheet" aria-labelledby="entryTitle">
+      <div class="sheet-band sheet-band-strong">
+        <h2 id="entryTitle">2026 기록 입력</h2>
       </div>
 
       <div class="entry-grid">
-        <section class="entry-block" aria-labelledby="batterFormHeading">
-          <h3 id="batterFormHeading">타자 입력</h3>
-          <form id="batterForm" class="record-form">
+        <section class="entry-block">
+          <div class="sheet-band sheet-band-soft"><h3>팀 기록 입력</h3></div>
+          <form id="teamForm" class="record-form">
             <div class="form-grid">
-              <label class="form-field"><span>선수 선택</span><select name="player" id="batterPlayer" required></select></label>
-              <label class="form-field"><span>타석</span><input type="number" name="PA" min="0" step="1" value="0" required></label>
-              <label class="form-field"><span>타수</span><input type="number" name="AB" min="0" step="1" value="0" required></label>
-              <label class="form-field"><span>안타</span><input type="number" name="H" min="0" step="1" value="0" required></label>
-              <label class="form-field"><span>홈런</span><input type="number" name="HR" min="0" step="1" value="0" required></label>
-              <label class="form-field"><span>볼넷</span><input type="number" name="BB" min="0" step="1" value="0" required></label>
-              <label class="form-field"><span>사구</span><input type="number" name="HBP" min="0" step="1" value="0" required></label>
-              <label class="form-field"><span>루타</span><input type="number" name="TB" min="0" step="1" value="0" required></label>
-              <label class="form-field"><span>타점</span><input type="number" name="RBI" min="0" step="1" value="0" required></label>
-              <label class="form-field"><span>득점</span><input type="number" name="R" min="0" step="1" value="0" required></label>
-              <label class="form-field"><span>도루</span><input type="number" name="SB" min="0" step="1" value="0" required></label>
-              <label class="form-field"><span>삼진</span><input type="number" name="SO" min="0" step="1" value="0" required></label>
-              <label class="form-field"><span>병살</span><input type="number" name="GIDP" min="0" step="1" value="0" required></label>
+              <label class="form-field">
+                <span>경기일</span>
+                <input type="date" name="date">
+              </label>
+              <label class="form-field">
+                <span>상대팀</span>
+                <input type="text" name="opponent" placeholder="상대팀">
+              </label>
+              <label class="form-field">
+                <span>결과</span>
+                <select name="result">
+                  <option value="W">승</option>
+                  <option value="L">패</option>
+                  <option value="D">무</option>
+                </select>
+              </label>
+              <label class="form-field">
+                <span>득점</span>
+                <input type="number" name="runsScored" min="0" step="1" value="0" required>
+              </label>
+              <label class="form-field">
+                <span>실점</span>
+                <input type="number" name="runsAllowed" min="0" step="1" value="0" required>
+              </label>
+              <label class="form-field form-field-wide">
+                <span>비고</span>
+                <input type="text" name="note" placeholder="메모">
+              </label>
             </div>
-            <button type="submit" class="submit-button">타자 기록 저장</button>
+            <button type="submit" class="action-button">팀 경기 저장</button>
           </form>
         </section>
 
-        <section class="entry-block" aria-labelledby="pitcherFormHeading">
-          <h3 id="pitcherFormHeading">투수 입력</h3>
+        <section class="entry-block">
+          <div class="sheet-band sheet-band-soft"><h3>타자 기록 입력</h3></div>
+          <form id="batterForm" class="record-form">
+            <div class="form-grid">
+              <label class="form-field">
+                <span>선수</span>
+                <select name="player" id="batterPlayer" required></select>
+              </label>
+              <label class="form-field"><span>타석</span><input type="number" name="PA" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>타수</span><input type="number" name="AB" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>총안타</span><input type="number" name="H" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>2루타</span><input type="number" name="D2" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>3루타</span><input type="number" name="D3" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>홈런</span><input type="number" name="HR" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>타점</span><input type="number" name="RBI" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>득점</span><input type="number" name="R" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>도루</span><input type="number" name="SB" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>도루실패</span><input type="number" name="CS" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>볼넷</span><input type="number" name="BB" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>사구</span><input type="number" name="HBP" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>희생타</span><input type="number" name="SH" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>희생플라이</span><input type="number" name="SF" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>삼진</span><input type="number" name="SO" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>병살</span><input type="number" name="GIDP" min="0" step="1" value="0" required></label>
+            </div>
+            <button type="submit" class="action-button">타자 기록 저장</button>
+          </form>
+        </section>
+
+        <section class="entry-block">
+          <div class="sheet-band sheet-band-soft"><h3>투수 기록 입력</h3></div>
           <form id="pitcherForm" class="record-form">
             <div class="form-grid">
-              <label class="form-field"><span>선수 선택</span><select name="player" id="pitcherPlayer" required></select></label>
-              <label class="form-field"><span>이닝</span><input type="text" name="IP" inputmode="decimal" placeholder="예: 6.1" value="0" required></label>
+              <label class="form-field">
+                <span>선수</span>
+                <select name="player" id="pitcherPlayer" required></select>
+              </label>
+              <label class="form-field"><span>이닝</span><input type="text" name="IP" inputmode="decimal" value="0" placeholder="예: 6.1" required></label>
+              <label class="form-field"><span>승</span><input type="number" name="W" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>패</span><input type="number" name="L" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>세이브</span><input type="number" name="SV" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>홀드</span><input type="number" name="HLD" min="0" step="1" value="0" required></label>
               <label class="form-field"><span>타자</span><input type="number" name="BF" min="0" step="1" value="0" required></label>
+              <label class="form-field"><span>타수</span><input type="number" name="AB" min="0" step="1" value="0" required></label>
               <label class="form-field"><span>피안타</span><input type="number" name="H" min="0" step="1" value="0" required></label>
               <label class="form-field"><span>피홈런</span><input type="number" name="HR" min="0" step="1" value="0" required></label>
               <label class="form-field"><span>볼넷</span><input type="number" name="BB" min="0" step="1" value="0" required></label>
@@ -63,10 +114,12 @@
               <label class="form-field"><span>실점</span><input type="number" name="R" min="0" step="1" value="0" required></label>
               <label class="form-field"><span>자책</span><input type="number" name="ER" min="0" step="1" value="0" required></label>
             </div>
-            <button type="submit" class="submit-button">투수 기록 저장</button>
+            <button type="submit" class="action-button">투수 기록 저장</button>
           </form>
         </section>
       </div>
+
+      <p id="statusMessage" class="status-message" aria-live="polite"></p>
     </section>
 
     <section id="pageContainer" class="page-container" aria-live="polite"></section>
