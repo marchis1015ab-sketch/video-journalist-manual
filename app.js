@@ -1,159 +1,104 @@
+const WORKBOOK_FILE_CANDIDATES = ["player-records.xlsx"];
+
 const PAGE_DEFINITIONS = [
-  {
-    id: "team-2026",
-    buttonLabel: "2026 팀 기록",
-    title: "2026 팀 기록",
-    requiredGroups: [["2026"], ["팀", "team"]],
-    optionalTerms: ["기록", "성적", "record", "stat"],
-    excludeTerms: ["타자", "타격", "hitter", "batter", "투수", "pitcher"],
-  },
-  {
-    id: "batting-2026",
-    buttonLabel: "2026 타자",
-    title: "2026년 타자 기록",
-    requiredGroups: [["2026"], ["타자", "타격", "hitter", "batter"]],
-    optionalTerms: ["기록", "성적", "record", "stat"],
-    excludeTerms: ["투수", "pitcher", "팀", "team"],
-  },
-  {
-    id: "pitching-2026",
-    buttonLabel: "2026 투수",
-    title: "2026년 투수 기록",
-    requiredGroups: [["2026"], ["투수", "pitcher"]],
-    optionalTerms: ["기록", "성적", "record", "stat"],
-    excludeTerms: ["타자", "타격", "hitter", "batter", "팀", "team"],
-  },
-  {
-    id: "career-batting",
-    buttonLabel: "타자 통산",
-    title: "타자 통산기록",
-    requiredGroups: [["타자", "타격", "hitter", "batter"], ["통산", "career", "total"]],
-    optionalTerms: ["기록", "성적", "record", "stat"],
-    excludeTerms: ["순위", "rank", "ranking", "투수", "pitcher"],
-  },
-  {
-    id: "career-pitching",
-    buttonLabel: "투수 통산",
-    title: "투수 통산기록",
-    requiredGroups: [["투수", "pitcher"], ["통산", "career", "total"]],
-    optionalTerms: ["기록", "성적", "record", "stat"],
-    excludeTerms: ["순위", "rank", "ranking", "타자", "타격", "hitter", "batter"],
-  },
-  {
-    id: "ranking-batting",
-    buttonLabel: "타자 순위",
-    title: "타자 통산 순위",
-    requiredGroups: [["타자", "타격", "hitter", "batter"], ["통산", "career", "total"], ["순위", "rank", "ranking"]],
-    optionalTerms: ["기록", "성적", "record", "stat"],
-    excludeTerms: ["투수", "pitcher"],
-  },
-  {
-    id: "ranking-pitching",
-    buttonLabel: "투수 순위",
-    title: "투수 통산 순위",
-    requiredGroups: [["투수", "pitcher"], ["통산", "career", "total"], ["순위", "rank", "ranking"]],
-    optionalTerms: ["기록", "성적", "record", "stat"],
-    excludeTerms: ["타자", "타격", "hitter", "batter"],
-  },
-  {
-    id: "batting-2022",
-    buttonLabel: "2022 타자",
-    title: "2022년 타자 기록",
-    requiredGroups: [["2022"], ["타자", "타격", "hitter", "batter"]],
-    optionalTerms: ["기록", "성적", "record", "stat"],
-    excludeTerms: ["투수", "pitcher"],
-  },
-  {
-    id: "batting-2023",
-    buttonLabel: "2023 타자",
-    title: "2023년 타자 기록",
-    requiredGroups: [["2023"], ["타자", "타격", "hitter", "batter"]],
-    optionalTerms: ["기록", "성적", "record", "stat"],
-    excludeTerms: ["투수", "pitcher"],
-  },
-  {
-    id: "batting-2024",
-    buttonLabel: "2024 타자",
-    title: "2024년 타자 기록",
-    requiredGroups: [["2024"], ["타자", "타격", "hitter", "batter"]],
-    optionalTerms: ["기록", "성적", "record", "stat"],
-    excludeTerms: ["투수", "pitcher"],
-  },
-  {
-    id: "batting-2025",
-    buttonLabel: "2025 타자",
-    title: "2025년 타자 기록",
-    requiredGroups: [["2025"], ["타자", "타격", "hitter", "batter"]],
-    optionalTerms: ["기록", "성적", "record", "stat"],
-    excludeTerms: ["투수", "pitcher"],
-  },
-  {
-    id: "pitching-2022",
-    buttonLabel: "2022 투수",
-    title: "2022년 투수 기록",
-    requiredGroups: [["2022"], ["투수", "pitcher"]],
-    optionalTerms: ["기록", "성적", "record", "stat"],
-    excludeTerms: ["타자", "타격", "hitter", "batter"],
-  },
-  {
-    id: "pitching-2023",
-    buttonLabel: "2023 투수",
-    title: "2023년 투수 기록",
-    requiredGroups: [["2023"], ["투수", "pitcher"]],
-    optionalTerms: ["기록", "성적", "record", "stat"],
-    excludeTerms: ["타자", "타격", "hitter", "batter"],
-  },
-  {
-    id: "pitching-2024",
-    buttonLabel: "2024 투수",
-    title: "2024년 투수 기록",
-    requiredGroups: [["2024"], ["투수", "pitcher"]],
-    optionalTerms: ["기록", "성적", "record", "stat"],
-    excludeTerms: ["타자", "타격", "hitter", "batter"],
-  },
-  {
-    id: "pitching-2025",
-    buttonLabel: "2025 투수",
-    title: "2025년 투수 기록",
-    requiredGroups: [["2025"], ["투수", "pitcher"]],
-    optionalTerms: ["기록", "성적", "record", "stat"],
-    excludeTerms: ["타자", "타격", "hitter", "batter"],
-  },
+  { id: "team-2026", buttonLabel: "2026 팀 기록", title: "2026 팀 기록" },
+  { id: "batting-2026", buttonLabel: "2026 타자", title: "2026년 타자 기록" },
+  { id: "pitching-2026", buttonLabel: "2026 투수", title: "2026년 투수 기록" },
+  { id: "career-batting", buttonLabel: "타자 통산", title: "타자 통산기록" },
+  { id: "career-pitching", buttonLabel: "투수 통산", title: "투수 통산기록" },
+  { id: "ranking-batting", buttonLabel: "타자 순위", title: "타자 통산 순위" },
+  { id: "ranking-pitching", buttonLabel: "투수 순위", title: "투수 통산 순위" },
+  { id: "batting-2022", buttonLabel: "2022 타자", title: "2022년 타자 기록" },
+  { id: "batting-2023", buttonLabel: "2023 타자", title: "2023년 타자 기록" },
+  { id: "batting-2024", buttonLabel: "2024 타자", title: "2024년 타자 기록" },
+  { id: "batting-2025", buttonLabel: "2025 타자", title: "2025년 타자 기록" },
+  { id: "pitching-2022", buttonLabel: "2022 투수", title: "2022년 투수 기록" },
+  { id: "pitching-2023", buttonLabel: "2023 투수", title: "2023년 투수 기록" },
+  { id: "pitching-2024", buttonLabel: "2024 투수", title: "2024년 투수 기록" },
+  { id: "pitching-2025", buttonLabel: "2025 투수", title: "2025년 투수 기록" },
 ];
 
-const MANUAL_PAGE_MAPPING = {
-  "team-2026": null,
-  "batting-2026": null,
-  "pitching-2026": null,
+const PAGE_RANGES = {
+  "team-2026": {
+    sections: [
+      { title: "2026 타자 팀 기록", sheetName: "타자", rangeA1: "DK1:EL30", stickyRows: 2 },
+      { title: "2026 투수 팀 기록", sheetName: "투수", rangeA1: "A42:AD53", stickyRows: 2 },
+    ],
+  },
+  "batting-2026": {
+    sections: [
+      { title: "2026년 타자 기록", sheetName: "타자", rangeA1: "DK1:EL30", stickyRows: 2 },
+    ],
+  },
+  "pitching-2026": {
+    sections: [
+      { title: "2026년 투수 기록", sheetName: "투수", rangeA1: "A42:AD53", stickyRows: 2 },
+    ],
+  },
   "career-batting": {
-    sheetName: "2025",
-    rangeA1: "A23:O41",
+    sections: [
+      { title: "타자 통산기록", sheetName: "타자", rangeA1: "BK79:CO116", stickyRows: 3 },
+    ],
   },
-  "career-pitching": null,
+  "career-pitching": {
+    sections: [
+      { title: "투수 통산기록", sheetName: "투수", rangeA1: "A14:AE26", stickyRows: 3 },
+    ],
+  },
   "ranking-batting": {
-    sheetName: "2025",
-    rangeA1: "A23:O41",
+    sections: [
+      { title: "타자 통산 순위", sheetName: "타자", rangeA1: "BI40:CO77", stickyRows: 4 },
+    ],
   },
-  "ranking-pitching": null,
-  "batting-2022": null,
-  "batting-2023": null,
+  "ranking-pitching": {
+    sections: [
+      { title: "투수 통산 순위", sheetName: "투수", rangeA1: "A30:BG40", stickyRows: 1 },
+    ],
+  },
+  "batting-2022": {
+    sections: [
+      { title: "2022년 타자 기록", sheetName: "타자", rangeA1: "A1:AB30", stickyRows: 2 },
+    ],
+  },
+  "batting-2023": {
+    sections: [
+      { title: "2023년 타자 기록", sheetName: "타자", rangeA1: "AD1:BC30", stickyRows: 2 },
+    ],
+  },
   "batting-2024": {
-    sheetName: "2024",
-    rangeA1: "A1:L25",
+    sections: [
+      { title: "2024년 타자 기록", sheetName: "타자", rangeA1: "BE1:CF30", stickyRows: 2 },
+    ],
   },
   "batting-2025": {
-    sheetName: "2025",
-    rangeA1: "A1:O20",
+    sections: [
+      { title: "2025년 타자 기록", sheetName: "타자", rangeA1: "CH1:DI30", stickyRows: 2 },
+    ],
   },
-  "pitching-2022": null,
-  "pitching-2023": null,
-  "pitching-2024": null,
-  "pitching-2025": null,
+  "pitching-2022": {
+    sections: [
+      { title: "2022년 투수 기록", sheetName: "투수", rangeA1: "A1:AD12", stickyRows: 2 },
+    ],
+  },
+  "pitching-2023": {
+    sections: [
+      { title: "2023년 투수 기록", sheetName: "투수", rangeA1: "AE1:BG12", stickyRows: 2 },
+    ],
+  },
+  "pitching-2024": {
+    sections: [
+      { title: "2024년 투수 기록", sheetName: "투수", rangeA1: "BH1:CJ12", stickyRows: 2 },
+    ],
+  },
+  "pitching-2025": {
+    sections: [
+      { title: "2025년 투수 기록", sheetName: "투수", rangeA1: "CK1:DN12", stickyRows: 2 },
+    ],
+  },
 };
 
 const state = {
   activePageId: PAGE_DEFINITIONS[0].id,
-  pageBindings: new Map(),
   pageElements: new Map(),
 };
 
@@ -172,18 +117,13 @@ async function initialize() {
   }
 
   try {
-    const workbook = await loadWorkbook("집계.xlsx");
-    console.log("[records] 실제 읽은 시트명 목록:", workbook.SheetNames);
-
-    const candidates = buildCandidates(workbook);
-    const bindings = matchPagesToCandidates(PAGE_DEFINITIONS, candidates, workbook);
-
-    state.pageBindings = bindings;
-    renderAllPageTables();
+    const workbook = await loadWorkbook();
+    console.log("[records] SheetNames:", workbook.SheetNames);
+    renderAllPages(workbook);
     setActivePage(state.activePageId);
   } catch (error) {
-    console.error("[records] 집계.xlsx 로드 실패:", error);
-    showGlobalMessage("집계.xlsx 파일을 불러오지 못했습니다.");
+    console.error("[records] 엑셀 로드 실패:", error);
+    showGlobalMessage("player-records.xlsx 파일을 불러오지 못했습니다.");
     renderLoadFailure();
   }
 }
@@ -224,554 +164,335 @@ function renderLayout() {
   setActivePage(state.activePageId);
 }
 
-async function loadWorkbook(path) {
-  const response = await fetch(path, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+async function loadWorkbook() {
+  let lastError = null;
+
+  for (const path of WORKBOOK_FILE_CANDIDATES) {
+    try {
+      const response = await fetch(path, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const buffer = await response.arrayBuffer();
+      console.log(`[records] workbook loaded from "${path}"`);
+      return XLSX.read(buffer, {
+        type: "array",
+        cellNF: false,
+        cellHTML: false,
+        cellStyles: false,
+      });
+    } catch (error) {
+      lastError = error;
+      console.warn(`[records] workbook load failed for "${path}"`, error);
+    }
   }
 
-  const buffer = await response.arrayBuffer();
-  return XLSX.read(buffer, {
-    type: "array",
-    cellNF: false,
-    cellHTML: false,
-    cellStyles: false,
-  });
+  throw lastError ?? new Error("Workbook file not found.");
 }
 
-function buildCandidates(workbook) {
-  const candidates = [];
+function renderAllPages(workbook) {
+  PAGE_DEFINITIONS.forEach((page) => {
+    const content = state.pageElements.get(page.id)?.content;
+    const config = PAGE_RANGES[page.id];
 
-  workbook.SheetNames.forEach((sheetName) => {
-    const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet, {
-      header: 1,
-      raw: false,
-      blankrows: true,
-      defval: "",
-    });
-
-    const grid = normalizeGrid(rows);
-    const trimmed = trimOuterEmpty(grid);
-
-    if (!trimmed) {
-      console.warn(`[records] 빈 시트는 제외합니다: ${sheetName}`);
+    if (!content) {
       return;
     }
 
-    candidates.push(createCandidate(sheetName, encodeRange(
-      trimmed.rowStart,
-      trimmed.colStart,
-      trimmed.rowEnd,
-      trimmed.colEnd
-    ), trimmed.data));
+    content.replaceChildren();
 
-    const blocks = splitIntoBlocks(trimmed.data, trimmed.rowStart, trimmed.colStart);
-    const usableBlocks = blocks.length > 0 ? blocks : [{
-      data: trimmed.data,
-      rowStart: trimmed.rowStart,
-      rowEnd: trimmed.rowEnd,
-      colStart: trimmed.colStart,
-      colEnd: trimmed.colEnd,
-    }];
+    if (!config || !Array.isArray(config.sections) || config.sections.length === 0) {
+      content.appendChild(createEmptyMessage("페이지 범위 설정이 없습니다."));
+      console.warn(`[records] ${page.id} PAGE_RANGES 설정이 없습니다.`);
+      return;
+    }
 
-    usableBlocks.forEach((block, index) => {
-      const rangeA1 = encodeRange(block.rowStart, block.colStart, block.rowEnd, block.colEnd);
-
-      candidates.push(createCandidate(sheetName, rangeA1, block.data, index));
+    config.sections.forEach((sectionConfig) => {
+      content.appendChild(renderRangeSection(page, sectionConfig, workbook));
     });
   });
-
-  return candidates;
 }
 
-function matchPagesToCandidates(pages, candidates, workbook) {
-  const bindings = new Map();
-  const usedCandidateKeys = new Set();
-  const sheetNames = workbook.SheetNames;
-  const candidateSummary = candidates
-    .map((candidate) => `${candidate.sheetName}:${candidate.rangeA1}`)
-    .join(", ");
+function renderRangeSection(page, sectionConfig, workbook) {
+  const wrapper = document.createElement("section");
+  wrapper.className = "range-section";
 
-  pages.forEach((page) => {
-    const manualBinding = getManualBinding(page, workbook, candidates);
-    if (manualBinding) {
-      bindings.set(page.id, manualBinding);
-      usedCandidateKeys.add(manualBinding.key);
-      console.log(
-        `[records] ${page.title}: 수동 매핑 시트="${manualBinding.sheetName}", 범위="${manualBinding.rangeA1}"`
-      );
-      return;
-    }
-
-    const ranked = candidates
-      .map((candidate) => ({
-        candidate,
-        score: scoreCandidate(page, candidate),
-      }))
-      .filter((entry) => Number.isFinite(entry.score) && entry.score > 0)
-      .sort((left, right) => right.score - left.score);
-
-    let selected = ranked.find((entry) => !usedCandidateKeys.has(entry.candidate.key));
-    if (!selected) {
-      selected = ranked[0];
-    }
-
-    if (!selected) {
-      console.warn(
-        `[records] "${page.title}"에 맞는 시트/범위를 찾지 못했습니다. 연결 후보를 확인하세요. 시트 목록: ${sheetNames.join(", ")} / 범위 후보: ${candidateSummary}`
-      );
-      bindings.set(page.id, null);
-      return;
-    }
-
-    usedCandidateKeys.add(selected.candidate.key);
-    bindings.set(page.id, selected.candidate);
-
-    if (selected.score < 100) {
-      console.warn(
-        `[records] "${page.title}" 자동 매칭 신뢰도가 낮습니다. 선택된 연결: ${selected.candidate.sheetName}:${selected.candidate.rangeA1}`
-      );
-    }
-
-    console.log(
-      `[records] ${page.title}: 시트="${selected.candidate.sheetName}", 범위="${selected.candidate.rangeA1}"`
-    );
-  });
-
-  return bindings;
-}
-
-function getManualBinding(page, workbook, candidates) {
-  const mapping = MANUAL_PAGE_MAPPING[page.id];
-  if (!mapping) {
-    return null;
+  if (sectionConfig.title) {
+    const heading = document.createElement("h3");
+    heading.className = "range-title";
+    heading.textContent = sectionConfig.title;
+    wrapper.appendChild(heading);
   }
 
-  if (!workbook.SheetNames.includes(mapping.sheetName)) {
+  const preview = getRangePreview(workbook, sectionConfig);
+  logRangePreview(page, sectionConfig, preview);
+
+  if (preview.error) {
+    wrapper.appendChild(createEmptyMessage(preview.error));
+    return wrapper;
+  }
+
+  if (!preview.rows.length || !preview.rows.some((row) => row.some((cell) => cell.text !== ""))) {
     console.warn(
-      `[records] "${page.title}" 수동 매핑 시트가 없습니다: ${mapping.sheetName}`
+      `[records] ${page.title} 범위가 비어 있습니다: ${sectionConfig.sheetName} ${sectionConfig.rangeA1}`
     );
-    return null;
+    wrapper.appendChild(createEmptyMessage("범위를 확인하세요. 현재 구역이 비어 있습니다."));
+    return wrapper;
   }
 
-  if (mapping.rangeA1) {
-    const manualRangeCandidate = buildManualRangeCandidate(workbook, mapping.sheetName, mapping.rangeA1);
-    if (!manualRangeCandidate) {
-      console.warn(
-        `[records] "${page.title}" 수동 매핑 범위를 읽지 못했습니다: ${mapping.sheetName}:${mapping.rangeA1}`
-      );
-      return null;
-    }
-
-    return manualRangeCandidate;
-  }
-
-  const sheetCandidates = candidates.filter((candidate) => candidate.sheetName === mapping.sheetName);
-  if (sheetCandidates.length === 0) {
-    console.warn(
-      `[records] "${page.title}" 수동 매핑 시트 후보를 찾지 못했습니다: ${mapping.sheetName}`
-    );
-    return null;
-  }
-
-  const exactSheetCandidate = sheetCandidates.find((candidate) => candidate.blockIndex === -1);
-  return exactSheetCandidate ?? sheetCandidates[0];
+  wrapper.appendChild(buildTable(preview.rows, preview.merges, sectionConfig.stickyRows ?? 1));
+  return wrapper;
 }
 
-function buildManualRangeCandidate(workbook, sheetName, rangeA1) {
-  const sheet = workbook.Sheets[sheetName];
+function getRangePreview(workbook, sectionConfig) {
+  if (!sectionConfig.rangeA1) {
+    return {
+      error: `PAGE_RANGES에서 ${sectionConfig.sheetName} 범위를 입력하세요.`,
+      startCell: "",
+      endCell: "",
+      values: [],
+      rows: [],
+      merges: [],
+    };
+  }
+
+  const sheet = workbook.Sheets[sectionConfig.sheetName];
   if (!sheet) {
-    return null;
+    return {
+      error: `시트를 찾지 못했습니다: ${sectionConfig.sheetName}`,
+      startCell: sectionConfig.rangeA1.split(":")[0] ?? sectionConfig.rangeA1,
+      endCell: sectionConfig.rangeA1.split(":")[1] ?? sectionConfig.rangeA1,
+      values: [],
+      rows: [],
+      merges: [],
+    };
   }
 
-  const rows = XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    raw: false,
-    blankrows: true,
-    defval: "",
-    range: rangeA1,
-  });
-  const grid = normalizeGrid(rows);
-  const trimmed = trimOuterEmpty(grid);
+  const decoded = XLSX.utils.decode_range(sectionConfig.rangeA1);
+  const rows = [];
 
-  if (!trimmed) {
-    return null;
+  for (let rowIndex = decoded.s.r; rowIndex <= decoded.e.r; rowIndex += 1) {
+    const row = [];
+    for (let columnIndex = decoded.s.c; columnIndex <= decoded.e.c; columnIndex += 1) {
+      const address = XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex });
+      row.push({
+        address,
+        text: stringifyCell(sheet[address]?.w ?? sheet[address]?.v ?? ""),
+      });
+    }
+    rows.push(row);
   }
 
-  return createCandidate(sheetName, rangeA1, trimmed.data, -2);
-}
+  const trimmed = trimRangeRowsAndColumns(rows, decoded);
+  const merges = extractMerges(sheet["!merges"] ?? [], trimmed.range);
+  const previewValues = trimmed.rows
+    .slice(0, 3)
+    .map((row) => row.slice(0, 6).map((cell) => cell.text).filter((value) => value !== "").join(" | "))
+    .filter((line) => line !== "");
 
-function createCandidate(sheetName, rangeA1, data, blockIndex = -1) {
   return {
-    key: `${sheetName}::${rangeA1}`,
-    sheetName,
-    rangeA1,
-    blockIndex,
-    data,
-    normalizedSheetName: normalizeText(sheetName),
-    normalizedPreview: normalizeText(flattenPreview(data)),
+    error: null,
+    startCell: XLSX.utils.encode_cell(trimmed.range.s),
+    endCell: XLSX.utils.encode_cell(trimmed.range.e),
+    values: previewValues,
+    rows: trimmed.rows,
+    merges,
   };
 }
 
-function scoreCandidate(page, candidate) {
-  const sheetText = candidate.normalizedSheetName;
-  const previewText = candidate.normalizedPreview;
-  let score = 0;
-  let hitGroups = 0;
+function trimRangeRowsAndColumns(rows, sourceRange) {
+  const meaningfulRows = rows
+    .map((row, index) => row.some((cell) => cell.text !== "") ? index : -1)
+    .filter((index) => index >= 0);
 
-  page.requiredGroups.forEach((group, index) => {
-    const normalizedTerms = group.map(normalizeText);
-    const inSheet = normalizedTerms.some((term) => sheetText.includes(term));
-    const inPreview = normalizedTerms.some((term) => previewText.includes(term));
-
-    if (inSheet) {
-      score += 70 - (index * 6);
-      hitGroups += 1;
-      return;
-    }
-
-    if (inPreview) {
-      score += 34 - (index * 4);
-      hitGroups += 1;
-    }
-  });
-
-  if (hitGroups === 0) {
-    return Number.NEGATIVE_INFINITY;
+  if (meaningfulRows.length === 0) {
+    return {
+      rows: [],
+      range: sourceRange,
+    };
   }
 
-  if (hitGroups < Math.max(1, page.requiredGroups.length - 1)) {
-    score -= 50;
+  const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 0);
+  const meaningfulColumns = [];
+
+  for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+    const hasValue = rows.some((row) => row[columnIndex]?.text !== "");
+    if (hasValue) {
+      meaningfulColumns.push(columnIndex);
+    }
   }
 
-  page.optionalTerms.forEach((term) => {
-    const normalizedTerm = normalizeText(term);
-    if (sheetText.includes(normalizedTerm)) {
-      score += 10;
-      return;
-    }
+  const rowStartOffset = meaningfulRows[0];
+  const rowEndOffset = meaningfulRows[meaningfulRows.length - 1];
+  const colStartOffset = meaningfulColumns[0];
+  const colEndOffset = meaningfulColumns[meaningfulColumns.length - 1];
 
-    if (previewText.includes(normalizedTerm)) {
-      score += 4;
-    }
-  });
-
-  page.excludeTerms.forEach((term) => {
-    const normalizedTerm = normalizeText(term);
-    if (sheetText.includes(normalizedTerm)) {
-      score -= 22;
-      return;
-    }
-
-    if (previewText.includes(normalizedTerm)) {
-      score -= 8;
-    }
-  });
-
-  if (sheetText === normalizeText(page.title)) {
-    score += 120;
-  } else if (sheetText.includes(normalizeText(page.buttonLabel))) {
-    score += 48;
-  }
-
-  score += Math.min(countMeaningfulRows(candidate.data), 10);
-  score += Math.min(maxColumns(candidate.data), 10);
-  return score;
+  return {
+    rows: rows
+      .slice(rowStartOffset, rowEndOffset + 1)
+      .map((row) => row.slice(colStartOffset, colEndOffset + 1)),
+    range: {
+      s: {
+        r: sourceRange.s.r + rowStartOffset,
+        c: sourceRange.s.c + colStartOffset,
+      },
+      e: {
+        r: sourceRange.s.r + rowEndOffset,
+        c: sourceRange.s.c + colEndOffset,
+      },
+    },
+  };
 }
 
-function renderAllPageTables() {
-  PAGE_DEFINITIONS.forEach((page) => {
-    const target = state.pageElements.get(page.id)?.content;
-    const binding = state.pageBindings.get(page.id);
+function extractMerges(mergeRanges, trimmedRange) {
+  const merges = [];
 
-    if (!target) {
+  mergeRanges.forEach((merge) => {
+    const intersectStartRow = Math.max(merge.s.r, trimmedRange.s.r);
+    const intersectEndRow = Math.min(merge.e.r, trimmedRange.e.r);
+    const intersectStartCol = Math.max(merge.s.c, trimmedRange.s.c);
+    const intersectEndCol = Math.min(merge.e.c, trimmedRange.e.c);
+
+    if (intersectStartRow > intersectEndRow || intersectStartCol > intersectEndCol) {
       return;
     }
 
-    target.replaceChildren();
-
-    if (!binding) {
-      const empty = document.createElement("div");
-      empty.className = "page-empty";
-      empty.textContent = "표를 찾지 못했습니다. 개발자 도구 콘솔의 경고를 확인하세요.";
-      target.appendChild(empty);
+    if (merge.s.r < trimmedRange.s.r || merge.s.c < trimmedRange.s.c) {
       return;
     }
 
-    const rendered = createRenderedTable(binding.data);
-    if (rendered.notes.length > 0) {
-      const notes = document.createElement("div");
-      notes.className = "table-notes";
-
-      rendered.notes.forEach((line) => {
-        const note = document.createElement("p");
-        note.textContent = line;
-        notes.appendChild(note);
-      });
-
-      target.appendChild(notes);
-    }
-
-    target.appendChild(rendered.tableWrap);
+    merges.push({
+      row: merge.s.r - trimmedRange.s.r,
+      col: merge.s.c - trimmedRange.s.c,
+      rowspan: intersectEndRow - merge.s.r + 1,
+      colspan: intersectEndCol - merge.s.c + 1,
+    });
   });
+
+  return merges;
+}
+
+function buildTable(rows, merges, stickyRows) {
+  const mergeLookup = new Map();
+  const coveredCells = new Set();
+
+  merges.forEach((merge) => {
+    mergeLookup.set(`${merge.row}:${merge.col}`, merge);
+
+    for (let rowOffset = 0; rowOffset < merge.rowspan; rowOffset += 1) {
+      for (let colOffset = 0; colOffset < merge.colspan; colOffset += 1) {
+        if (rowOffset === 0 && colOffset === 0) {
+          continue;
+        }
+
+        coveredCells.add(`${merge.row + rowOffset}:${merge.col + colOffset}`);
+      }
+    }
+  });
+
+  const wrap = document.createElement("div");
+  wrap.className = "table-wrap";
+
+  const table = document.createElement("table");
+  table.className = "sheet-table";
+  const tbody = document.createElement("tbody");
+
+  rows.forEach((row, rowIndex) => {
+    const tr = document.createElement("tr");
+    if (rowIndex < stickyRows) {
+      tr.className = "sticky-row";
+    }
+
+    row.forEach((cell, columnIndex) => {
+      const key = `${rowIndex}:${columnIndex}`;
+      if (coveredCells.has(key)) {
+        return;
+      }
+
+      const merge = mergeLookup.get(key);
+      const element = document.createElement(rowIndex < stickyRows ? "th" : "td");
+      element.textContent = cell.text;
+
+      if (rowIndex < stickyRows) {
+        element.classList.add("cell-sticky");
+        element.style.setProperty("--sticky-top", `${rowIndex * 45}px`);
+        element.scope = "col";
+      }
+
+      if (merge) {
+        if (merge.colspan > 1) {
+          element.colSpan = merge.colspan;
+        }
+
+        if (merge.rowspan > 1) {
+          element.rowSpan = merge.rowspan;
+        }
+      }
+
+      tr.appendChild(element);
+    });
+
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+function logRangePreview(page, sectionConfig, preview) {
+  const label = `${page.title} / ${sectionConfig.title || sectionConfig.sheetName}`;
+
+  if (preview.error) {
+    console.warn(
+      `[records] ${label} preview failed`,
+      {
+        sheetName: sectionConfig.sheetName,
+        startCell: sectionConfig.rangeA1.split(":")[0] ?? "",
+        endCell: sectionConfig.rangeA1.split(":")[1] ?? "",
+        previewValues: [],
+        error: preview.error,
+      }
+    );
+    return;
+  }
+
+  console.log(
+    `[records] ${label}`,
+    {
+      sheetName: sectionConfig.sheetName,
+      startCell: preview.startCell,
+      endCell: preview.endCell,
+      previewValues: preview.values,
+    }
+  );
+}
+
+function createEmptyMessage(message) {
+  const empty = document.createElement("div");
+  empty.className = "page-empty";
+  empty.textContent = message;
+  return empty;
 }
 
 function renderLoadFailure() {
   PAGE_DEFINITIONS.forEach((page) => {
-    const target = state.pageElements.get(page.id)?.content;
-    if (!target) {
+    const content = state.pageElements.get(page.id)?.content;
+    if (!content) {
       return;
     }
 
-    const empty = document.createElement("div");
-    empty.className = "page-empty";
-    empty.textContent = "집계.xlsx 파일을 불러오지 못했습니다.";
-    target.replaceChildren(empty);
+    content.replaceChildren(createEmptyMessage("player-records.xlsx 파일을 불러오지 못했습니다."));
   });
 }
 
-function createRenderedTable(data) {
-  const notes = [];
-  const headerRowIndex = detectHeaderRowIndex(data);
-  const noteRows = data.slice(0, headerRowIndex).filter((row) => row.some(isMeaningfulCell));
-  const headerRow = data[headerRowIndex] || [];
-  const bodyRows = data.slice(headerRowIndex + 1);
-
-  noteRows.forEach((row) => {
-    notes.push(
-      row
-        .filter(isMeaningfulCell)
-        .map((cell) => stringifyCell(cell))
-        .join(" / ")
-    );
-  });
-
-  const tableWrap = document.createElement("div");
-  tableWrap.className = "table-wrap";
-
-  const table = document.createElement("table");
-  const thead = document.createElement("thead");
-  const tbody = document.createElement("tbody");
-
-  const headerTr = document.createElement("tr");
-  headerRow.forEach((cell) => {
-    const th = document.createElement("th");
-    th.scope = "col";
-    th.textContent = stringifyCell(cell);
-    headerTr.appendChild(th);
-  });
-  thead.appendChild(headerTr);
-
-  bodyRows.forEach((row) => {
-    const tr = document.createElement("tr");
-    row.forEach((cell) => {
-      const td = document.createElement("td");
-      td.textContent = stringifyCell(cell);
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
-
-  table.appendChild(thead);
-  table.appendChild(tbody);
-  tableWrap.appendChild(table);
-  return { notes, tableWrap };
-}
-
-function detectHeaderRowIndex(data) {
-  const searchLimit = Math.min(data.length, 6);
-  let bestIndex = 0;
-  let bestScore = -1;
-
-  for (let index = 0; index < searchLimit; index += 1) {
-    const row = data[index] || [];
-    const filled = row.filter(isMeaningfulCell).length;
-    const textLike = row.filter((cell) => {
-      if (!isMeaningfulCell(cell)) {
-        return false;
-      }
-
-      return Number.isNaN(Number(String(cell).replace(/,/g, "")));
-    }).length;
-    const score = (filled * 3) + textLike;
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestIndex = index;
-    }
-  }
-
-  return bestIndex;
-}
-
-function normalizeGrid(rows) {
-  const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 0);
-  return rows.map((row) => {
-    const normalized = new Array(columnCount).fill("");
-    row.forEach((cell, index) => {
-      normalized[index] = cell;
-    });
-    return normalized;
-  });
-}
-
-function trimOuterEmpty(grid) {
-  const nonEmptyRows = grid
-    .map((row, index) => row.some(isMeaningfulCell) ? index : -1)
-    .filter((index) => index >= 0);
-
-  if (nonEmptyRows.length === 0) {
-    return null;
-  }
-
-  const nonEmptyCols = [];
-  const columnCount = maxColumns(grid);
-
-  for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
-    const hasValue = grid.some((row) => isMeaningfulCell(row[columnIndex]));
-    if (hasValue) {
-      nonEmptyCols.push(columnIndex);
-    }
-  }
-
-  if (nonEmptyCols.length === 0) {
-    return null;
-  }
-
-  const rowStart = nonEmptyRows[0];
-  const rowEnd = nonEmptyRows[nonEmptyRows.length - 1];
-  const colStart = nonEmptyCols[0];
-  const colEnd = nonEmptyCols[nonEmptyCols.length - 1];
-  const data = grid
-    .slice(rowStart, rowEnd + 1)
-    .map((row) => row.slice(colStart, colEnd + 1));
-
-  return {
-    data,
-    rowStart,
-    rowEnd,
-    colStart,
-    colEnd,
-  };
-}
-
-function splitIntoBlocks(data, rowOffset, colOffset) {
-  const rowIndices = [];
-  data.forEach((row, index) => {
-    if (row.some(isMeaningfulCell)) {
-      rowIndices.push(index);
-    }
-  });
-
-  const rowGroups = splitByGap(rowIndices, 1);
-  const blocks = [];
-
-  rowGroups.forEach((rowGroup) => {
-    const [relativeRowStart, relativeRowEnd] = rowGroup;
-    const slice = data.slice(relativeRowStart, relativeRowEnd + 1);
-    const columnIndices = [];
-    const columnCount = maxColumns(slice);
-
-    for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
-      const hasValue = slice.some((row) => isMeaningfulCell(row[columnIndex]));
-      if (hasValue) {
-        columnIndices.push(columnIndex);
-      }
-    }
-
-    const columnGroups = splitByGap(columnIndices, 1);
-    columnGroups.forEach((columnGroup) => {
-      const [relativeColStart, relativeColEnd] = columnGroup;
-      const blockData = slice.map((row) => row.slice(relativeColStart, relativeColEnd + 1));
-      const trimmedBlock = trimOuterEmpty(blockData);
-
-      if (!trimmedBlock) {
-        return;
-      }
-
-      blocks.push({
-        data: trimmedBlock.data,
-        rowStart: rowOffset + relativeRowStart + trimmedBlock.rowStart,
-        rowEnd: rowOffset + relativeRowStart + trimmedBlock.rowEnd,
-        colStart: colOffset + relativeColStart + trimmedBlock.colStart,
-        colEnd: colOffset + relativeColStart + trimmedBlock.colEnd,
-      });
-    });
-  });
-
-  return blocks;
-}
-
-function splitByGap(indices, minimumGap) {
-  if (indices.length === 0) {
-    return [];
-  }
-
-  const groups = [];
-  let start = indices[0];
-  let previous = indices[0];
-
-  for (let index = 1; index < indices.length; index += 1) {
-    const current = indices[index];
-    if ((current - previous) > minimumGap) {
-      groups.push([start, previous]);
-      start = current;
-    }
-    previous = current;
-  }
-
-  groups.push([start, previous]);
-  return groups;
-}
-
-function flattenPreview(data) {
-  return data
-    .slice(0, 8)
-    .map((row) => row.slice(0, 12).map(stringifyCell).join(" "))
-    .join(" ");
-}
-
-function encodeRange(rowStart, colStart, rowEnd, colEnd) {
-  return XLSX.utils.encode_range({
-    s: { r: rowStart, c: colStart },
-    e: { r: rowEnd, c: colEnd },
-  });
-}
-
-function countMeaningfulRows(data) {
-  return data.filter((row) => row.some(isMeaningfulCell)).length;
-}
-
-function maxColumns(data) {
-  return data.reduce((max, row) => Math.max(max, row.length), 0);
-}
-
-function isMeaningfulCell(cell) {
-  if (cell === null || cell === undefined) {
-    return false;
-  }
-
-  if (typeof cell === "string") {
-    return cell.trim() !== "";
-  }
-
-  return true;
-}
-
-function stringifyCell(cell) {
-  if (cell === null || cell === undefined) {
+function stringifyCell(value) {
+  if (value === null || value === undefined) {
     return "";
   }
 
-  return String(cell);
-}
-
-function normalizeText(value) {
-  return String(value ?? "")
-    .toLowerCase()
-    .replace(/\s+/g, "")
-    .replace(/[()\-_[\]{}]/g, "");
+  return String(value);
 }
 
 function setActivePage(pageId) {
