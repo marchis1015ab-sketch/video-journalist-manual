@@ -121,6 +121,36 @@ const PAGE_DEFINITIONS = [
   },
 ];
 
+const MANUAL_PAGE_MAPPING = {
+  "team-2026": null,
+  "batting-2026": null,
+  "pitching-2026": null,
+  "career-batting": {
+    sheetName: "2025",
+    rangeA1: "A23:O41",
+  },
+  "career-pitching": null,
+  "ranking-batting": {
+    sheetName: "2025",
+    rangeA1: "A23:O41",
+  },
+  "ranking-pitching": null,
+  "batting-2022": null,
+  "batting-2023": null,
+  "batting-2024": {
+    sheetName: "2024",
+    rangeA1: "A1:L25",
+  },
+  "batting-2025": {
+    sheetName: "2025",
+    rangeA1: "A1:O20",
+  },
+  "pitching-2022": null,
+  "pitching-2023": null,
+  "pitching-2024": null,
+  "pitching-2025": null,
+};
+
 const state = {
   activePageId: PAGE_DEFINITIONS[0].id,
   pageBindings: new Map(),
@@ -146,7 +176,7 @@ async function initialize() {
     console.log("[records] 실제 읽은 시트명 목록:", workbook.SheetNames);
 
     const candidates = buildCandidates(workbook);
-    const bindings = matchPagesToCandidates(PAGE_DEFINITIONS, candidates, workbook.SheetNames);
+    const bindings = matchPagesToCandidates(PAGE_DEFINITIONS, candidates, workbook);
 
     state.pageBindings = bindings;
     renderAllPageTables();
@@ -229,6 +259,13 @@ function buildCandidates(workbook) {
       return;
     }
 
+    candidates.push(createCandidate(sheetName, encodeRange(
+      trimmed.rowStart,
+      trimmed.colStart,
+      trimmed.rowEnd,
+      trimmed.colEnd
+    ), trimmed.data));
+
     const blocks = splitIntoBlocks(trimmed.data, trimmed.rowStart, trimmed.colStart);
     const usableBlocks = blocks.length > 0 ? blocks : [{
       data: trimmed.data,
@@ -239,32 +276,34 @@ function buildCandidates(workbook) {
     }];
 
     usableBlocks.forEach((block, index) => {
-      const normalizedPreview = normalizeText(flattenPreview(block.data));
       const rangeA1 = encodeRange(block.rowStart, block.colStart, block.rowEnd, block.colEnd);
 
-      candidates.push({
-        key: `${sheetName}::${rangeA1}`,
-        sheetName,
-        rangeA1,
-        blockIndex: index,
-        data: block.data,
-        normalizedSheetName: normalizeText(sheetName),
-        normalizedPreview,
-      });
+      candidates.push(createCandidate(sheetName, rangeA1, block.data, index));
     });
   });
 
   return candidates;
 }
 
-function matchPagesToCandidates(pages, candidates, sheetNames) {
+function matchPagesToCandidates(pages, candidates, workbook) {
   const bindings = new Map();
   const usedCandidateKeys = new Set();
+  const sheetNames = workbook.SheetNames;
   const candidateSummary = candidates
     .map((candidate) => `${candidate.sheetName}:${candidate.rangeA1}`)
     .join(", ");
 
   pages.forEach((page) => {
+    const manualBinding = getManualBinding(page, workbook, candidates);
+    if (manualBinding) {
+      bindings.set(page.id, manualBinding);
+      usedCandidateKeys.add(manualBinding.key);
+      console.log(
+        `[records] ${page.title}: 수동 매핑 시트="${manualBinding.sheetName}", 범위="${manualBinding.rangeA1}"`
+      );
+      return;
+    }
+
     const ranked = candidates
       .map((candidate) => ({
         candidate,
@@ -301,6 +340,78 @@ function matchPagesToCandidates(pages, candidates, sheetNames) {
   });
 
   return bindings;
+}
+
+function getManualBinding(page, workbook, candidates) {
+  const mapping = MANUAL_PAGE_MAPPING[page.id];
+  if (!mapping) {
+    return null;
+  }
+
+  if (!workbook.SheetNames.includes(mapping.sheetName)) {
+    console.warn(
+      `[records] "${page.title}" 수동 매핑 시트가 없습니다: ${mapping.sheetName}`
+    );
+    return null;
+  }
+
+  if (mapping.rangeA1) {
+    const manualRangeCandidate = buildManualRangeCandidate(workbook, mapping.sheetName, mapping.rangeA1);
+    if (!manualRangeCandidate) {
+      console.warn(
+        `[records] "${page.title}" 수동 매핑 범위를 읽지 못했습니다: ${mapping.sheetName}:${mapping.rangeA1}`
+      );
+      return null;
+    }
+
+    return manualRangeCandidate;
+  }
+
+  const sheetCandidates = candidates.filter((candidate) => candidate.sheetName === mapping.sheetName);
+  if (sheetCandidates.length === 0) {
+    console.warn(
+      `[records] "${page.title}" 수동 매핑 시트 후보를 찾지 못했습니다: ${mapping.sheetName}`
+    );
+    return null;
+  }
+
+  const exactSheetCandidate = sheetCandidates.find((candidate) => candidate.blockIndex === -1);
+  return exactSheetCandidate ?? sheetCandidates[0];
+}
+
+function buildManualRangeCandidate(workbook, sheetName, rangeA1) {
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) {
+    return null;
+  }
+
+  const rows = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    raw: false,
+    blankrows: true,
+    defval: "",
+    range: rangeA1,
+  });
+  const grid = normalizeGrid(rows);
+  const trimmed = trimOuterEmpty(grid);
+
+  if (!trimmed) {
+    return null;
+  }
+
+  return createCandidate(sheetName, rangeA1, trimmed.data, -2);
+}
+
+function createCandidate(sheetName, rangeA1, data, blockIndex = -1) {
+  return {
+    key: `${sheetName}::${rangeA1}`,
+    sheetName,
+    rangeA1,
+    blockIndex,
+    data,
+    normalizedSheetName: normalizeText(sheetName),
+    normalizedPreview: normalizeText(flattenPreview(data)),
+  };
 }
 
 function scoreCandidate(page, candidate) {
