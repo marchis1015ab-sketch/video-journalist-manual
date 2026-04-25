@@ -68,6 +68,8 @@ table {
 
 .page-nav {
   margin-top: 18px;
+  position: relative;
+  z-index: 30;
 }
 
 .page-buttons {
@@ -87,6 +89,7 @@ table {
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .page-button.is-active {

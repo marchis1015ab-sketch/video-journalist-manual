@@ -110,25 +110,38 @@ const state = {
   pageElements: new Map(),
 };
 
-const pageButtons = document.getElementById("pageButtons");
-const pageContainer = document.getElementById("pageContainer");
-const teamForm = document.getElementById("teamForm");
-const batterForm = document.getElementById("batterForm");
-const pitcherForm = document.getElementById("pitcherForm");
-const batterPlayer = document.getElementById("batterPlayer");
-const pitcherPlayer = document.getElementById("pitcherPlayer");
-const statusMessage = document.getElementById("statusMessage");
+let pageButtons;
+let pageContainer;
+let teamForm;
+let batterForm;
+let pitcherForm;
+let batterPlayer;
+let pitcherPlayer;
+let statusMessage;
 
-initialize();
+document.addEventListener("DOMContentLoaded", initialize);
 
 function initialize() {
+  cacheDomElements();
   populatePlayerSelects();
   renderNavigation();
   renderPageSections();
+  initNavigation();
   bindForms();
   renderAllPages();
   setActivePage(state.activePageId);
   showStatus("2026 시즌은 0에서 시작하며 입력 즉시 저장됩니다.");
+}
+
+function cacheDomElements() {
+  pageButtons = document.getElementById("pageButtons");
+  pageContainer = document.getElementById("pageContainer");
+  teamForm = document.getElementById("teamForm");
+  batterForm = document.getElementById("batterForm");
+  pitcherForm = document.getElementById("pitcherForm");
+  batterPlayer = document.getElementById("batterPlayer");
+  pitcherPlayer = document.getElementById("pitcherPlayer");
+  statusMessage = document.getElementById("statusMessage");
 }
 
 function populatePlayerSelects() {
@@ -143,18 +156,38 @@ function populatePlayerSelects() {
 }
 
 function renderNavigation() {
+  pageButtons.innerHTML = "";
+  state.pageElements.clear();
+
   PAGE_CONFIG.forEach((page) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "page-button";
+    button.className = "page-button nav-button";
     button.textContent = page.button;
-    button.addEventListener("click", () => setActivePage(page.id));
+    button.dataset.page = page.id;
     pageButtons.appendChild(button);
     state.pageElements.set(page.id, { button });
   });
 }
 
+function initNavigation() {
+  document.querySelectorAll(".nav-button").forEach((button) => {
+    button.addEventListener("click", handlePageButtonClick);
+  });
+}
+
+function handlePageButtonClick(event) {
+  event.preventDefault();
+  const pageKey = event.currentTarget.dataset.page;
+  console.log("page click:", pageKey);
+  if (!pageKey) {
+    return;
+  }
+  setActivePage(pageKey);
+}
+
 function renderPageSections() {
+  pageContainer.innerHTML = "";
   const fragment = document.createDocumentFragment();
 
   PAGE_CONFIG.forEach((page) => {
@@ -328,6 +361,10 @@ function showStatus(message, isError = false) {
 }
 
 function setActivePage(pageId) {
+  if (!state.pageElements.has(pageId)) {
+    return;
+  }
+
   state.activePageId = pageId;
   PAGE_CONFIG.forEach((page) => {
     const pageState = state.pageElements.get(page.id);
