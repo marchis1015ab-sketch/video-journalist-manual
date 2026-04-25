@@ -126,14 +126,15 @@ table {
   font-weight: 800;
 }
 
-.table-wrap {
+.table-scroll {
   overflow-x: auto;
   border: 1px solid var(--line);
   background: #fff;
+  max-width: 100%;
 }
 
 table {
-  min-width: 100%;
+  min-width: 1200px;
   width: max-content;
   border-collapse: collapse;
   table-layout: auto;
@@ -144,19 +145,42 @@ table {
 .sheet-table td,
 th,
 td {
-  padding: 11px 14px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   text-align: left;
   vertical-align: middle;
 }
 
-.cell-sticky {
+.cell-sticky-top {
   position: sticky;
   top: var(--sticky-top, 0px);
   z-index: 2;
   background: var(--thead);
   color: var(--thead-text);
   font-weight: 700;
+}
+
+.cell-sticky-left {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: inherit;
+}
+
+.cell-sticky-corner {
+  z-index: 3;
+}
+
+.align-left {
+  text-align: left;
+}
+
+.align-center {
+  text-align: center;
+}
+
+.align-right {
+  text-align: right;
 }
 
 .sheet-table tbody tr:nth-child(even) {
