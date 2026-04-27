@@ -1560,12 +1560,19 @@ function summarizeTeamBatting(rows, fallback = {}) {
 
 function buildGameRecordId(record) {
   const sourceTextHash = getSimpleHash(record.sourceText || "");
-  const base = (
-    record.sourceUrl ||
-    `${record.year}|${record.date}|${record.opponent}|${record.scoreFor}|${record.scoreAgainst}|${sourceTextHash}`
-  )
-    .trim()
-    .toLowerCase();
+  let base = String(record.sourceUrl || "").trim();
+
+  if (!base) {
+    const identityParts = [record.year, record.date, record.opponent]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+
+    base = identityParts.length >= 3
+      ? identityParts.join("|")
+      : `${record.year}|${record.date}|${record.opponent}|${record.scoreFor}|${record.scoreAgainst}|${sourceTextHash}`;
+  }
+
+  base = base.toLowerCase();
   return `game-${base.replace(/[^a-z0-9가-힣]+/gi, "-")}`;
 }
 
@@ -1727,6 +1734,14 @@ function upsertPitcherGameLogs(record) {
 }
 
 function saveGameRecord(record, options = {}) {
+  if (!isEditableYear(record.year)) {
+    return {
+      saved: false,
+      readOnly: true,
+      record,
+    };
+  }
+
   const existing = getExistingGameRecord(record);
   if (existing && !options.overwrite) {
     return {
@@ -2317,7 +2332,7 @@ function renderTeamRecordTable(year) {
     return `
       <div class="placeholder-panel">
         <h2>${year}년 팀기록</h2>
-        <p>아직 저장된 경기 기록이 없습니다. 게임원 경기결과 주소와 표 원문을 붙여넣어 첫 경기를 저장해 주세요.</p>
+        <p>${isEditableYear(year) ? "아직 저장된 경기 기록이 없습니다. 직접 입력으로 첫 경기를 저장해 주세요." : "표시할 고정 팀기록이 없습니다."}</p>
       </div>
     `;
   }
@@ -2407,175 +2422,230 @@ function buildMatchingOptions(selected) {
   ].join("");
 }
 
-function renderTeamImportPreview(year) {
-  const draft = teamImportDrafts[year];
-  if (!draft?.record) {
-    return "";
-  }
-
-  const record = draft.record;
-  const duplicate = getExistingGameRecord(record);
-  const hasUnmatched = record.unmatchedPlayers.length > 0;
-  const matchingMarkup = hasUnmatched
-    ? `
-      <section class="team-import-match">
-        <h4>선수명 매칭 필요</h4>
-        <div class="team-match-grid">
-          ${record.unmatchedPlayers
-            .map((name) => `
-              <label class="team-match-item">
-                <span>${escapeHtml(name)}</span>
-                <select data-player-match="${escapeHtml(name)}">
-                  ${buildMatchingOptions(record.matchingMap?.[name] || "")}
-                </select>
-              </label>
-            `)
-            .join("")}
-        </div>
-      </section>
-    `
-    : "";
-
-  const battingPreview = buildGameLogDetailRows(record, "batter");
-  const pitcherPreview = buildGameLogDetailRows(record, "pitcher");
-
-  return `
-    <section class="team-import-preview">
-      <div class="team-import-preview-header">
-        <h3>변환 미리보기</h3>
-        <p>${duplicate ? "이미 저장된 경기입니다. 저장하면 기존 경기 데이터를 덮어씁니다." : "저장 전에 날짜, 상대팀, 스코어와 선수명 매칭을 확인해 주세요."}</p>
-      </div>
-      <div class="team-edit-grid">
-        <label><span>경기 날짜</span><input id="team-record-date-${year}" type="date" value="${escapeHtml(record.date)}"></label>
-        <label><span>상대팀</span><input id="team-record-opponent-${year}" type="text" value="${escapeHtml(record.opponent)}" placeholder="상대팀"></label>
-        <label><span>득점</span><input id="team-record-score-for-${year}" type="number" min="0" value="${safeNumberLocal(record.scoreFor)}"></label>
-        <label><span>실점</span><input id="team-record-score-against-${year}" type="number" min="0" value="${safeNumberLocal(record.scoreAgainst)}"></label>
-        <label><span>득점권</span><input id="team-record-risp-${year}" type="text" value="${escapeHtml(record.teamBattingSummary?.risp || "")}" placeholder="예: 7타수 3안타"></label>
-        <label><span>실책</span><input id="team-record-errors-${year}" type="number" min="0" value="${safeNumberLocal(record.teamBattingSummary?.errors)}"></label>
-        <label class="team-edit-wide"><span>비고</span><input id="team-record-notes-${year}" type="text" value="${escapeHtml(record.teamBattingSummary?.notes || "")}" placeholder="비고"></label>
-      </div>
-      ${matchingMarkup}
-      ${draft.warnings?.length ? `<div class="team-import-warnings">${draft.warnings.map((warning) => `<p>${escapeHtml(warning)}</p>`).join("")}</div>` : ""}
-      <div class="team-import-preview-tables">
-        <section class="team-detail-block">
-          <h4>선수 타격기록 미리보기</h4>
-          <div class="table-wrap">${battingPreview.length ? createTableMarkup(gameLogBatterColumns, battingPreview) : `<div class="placeholder-panel"><p>타격기록 표를 찾지 못했습니다.</p></div>`}</div>
-        </section>
-        <section class="team-detail-block">
-          <h4>투수기록 미리보기</h4>
-          <div class="table-wrap">${pitcherPreview.length ? createTableMarkup(gameLogPitcherColumns, pitcherPreview) : `<div class="placeholder-panel"><p>투수기록 표를 찾지 못했습니다.</p></div>`}</div>
-        </section>
-      </div>
-      <div class="team-import-actions">
-        <button id="team-save-button-${year}" type="button"${hasUnmatched ? " disabled" : ""}>${duplicate ? "덮어쓰기 저장" : "저장"}</button>
-      </div>
-    </section>
-  `;
+function isEditableYear(year) {
+  return String(year) === "2026";
 }
 
-function collectTeamDraftFromInputs(year) {
-  const draft = teamImportDrafts[year];
-  if (!draft?.record) {
-    return null;
+function parseManualRows(rawText, type) {
+  const htmlBlocks = /<table/i.test(String(rawText || "")) ? extractTableBlocksFromHtml(rawText) : [];
+  const textBlocks = extractTableBlocksFromText(rawText);
+  const blocks = [...htmlBlocks, ...textBlocks];
+
+  for (const block of blocks) {
+    const rows = type === "pitcher" ? parsePitcherRowsFromMatrix(block) : parseBattingRowsFromMatrix(block);
+    if (rows.length) {
+      return rows;
+    }
   }
 
-  const matchingMap = { ...(draft.record.matchingMap || {}) };
+  return [];
+}
+
+function getTeamDraftFormData(year) {
+  const draft = teamImportDrafts[year];
+  return (
+    draft?.formData || {
+      date: "",
+      opponent: "",
+      scoreFor: "",
+      scoreAgainst: "",
+      risp: "",
+      errors: "",
+      notes: "",
+      batterRaw: "",
+      pitcherRaw: "",
+    }
+  );
+}
+
+function buildTeamDraftFromInputs(year) {
+  const previousDraft = teamImportDrafts[year];
+  const formData = {
+    date: document.getElementById(`team-record-date-${year}`)?.value || "",
+    opponent: document.getElementById(`team-record-opponent-${year}`)?.value || "",
+    scoreFor: document.getElementById(`team-record-score-for-${year}`)?.value || "",
+    scoreAgainst: document.getElementById(`team-record-score-against-${year}`)?.value || "",
+    risp: document.getElementById(`team-record-risp-${year}`)?.value || "",
+    errors: document.getElementById(`team-record-errors-${year}`)?.value || "",
+    notes: document.getElementById(`team-record-notes-${year}`)?.value || "",
+    batterRaw: document.getElementById(`team-record-batter-raw-${year}`)?.value || "",
+    pitcherRaw: document.getElementById(`team-record-pitcher-raw-${year}`)?.value || "",
+  };
+
+  const matchingMap = { ...(previousDraft?.record?.matchingMap || {}) };
   document.querySelectorAll("[data-player-match]").forEach((select) => {
     if (select.value) {
       matchingMap[select.dataset.playerMatch] = select.value;
     }
   });
 
-  return normalizeGameRecord(
+  const battingRows = parseManualRows(formData.batterRaw, "batter");
+  const pitcherRows = parseManualRows(formData.pitcherRaw, "pitcher");
+  const warnings = [];
+
+  if (!battingRows.length) {
+    warnings.push("선수 타격기록 입력값을 확인해 주세요.");
+  }
+  if (!pitcherRows.length) {
+    warnings.push("투수기록 입력값을 확인해 주세요.");
+  }
+
+  const rawSource = [formData.batterRaw, formData.pitcherRaw].filter(Boolean).join("\n\n");
+  const record = normalizeGameRecord(
     {
-      ...draft.record,
-      sourceUrl: draft.sourceUrl,
-      sourceText: draft.rawText,
-      rawText: draft.rawText,
+      battingRows,
+      pitcherRows,
+      sourceText: rawSource,
       teamBattingSummary: {
-        ...(draft.record.teamBattingSummary || createEmptyTeamBattingSummary()),
-        risp: document.getElementById(`team-record-risp-${year}`)?.value || "",
-        errors: document.getElementById(`team-record-errors-${year}`)?.value || 0,
-        notes: document.getElementById(`team-record-notes-${year}`)?.value || "",
+        risp: formData.risp,
+        errors: formData.errors,
+        notes: formData.notes,
       },
     },
     {
       year,
-      sourceUrl: draft.sourceUrl,
-      sourceText: draft.rawText,
-      date: document.getElementById(`team-record-date-${year}`)?.value || draft.record.date,
-      opponent: document.getElementById(`team-record-opponent-${year}`)?.value || draft.record.opponent,
-      scoreFor: document.getElementById(`team-record-score-for-${year}`)?.value || draft.record.scoreFor,
-      scoreAgainst: document.getElementById(`team-record-score-against-${year}`)?.value || draft.record.scoreAgainst,
-      teamBattingSummary: {
-        ...(draft.record.teamBattingSummary || createEmptyTeamBattingSummary()),
-        risp: document.getElementById(`team-record-risp-${year}`)?.value || "",
-        errors: document.getElementById(`team-record-errors-${year}`)?.value || 0,
-        notes: document.getElementById(`team-record-notes-${year}`)?.value || "",
-      },
+      date: formData.date,
+      opponent: formData.opponent,
+      scoreFor: formData.scoreFor,
+      scoreAgainst: formData.scoreAgainst,
+      sourceText: rawSource,
       matchingMap,
-      createdAt: draft.record.createdAt,
+      teamBattingSummary: {
+        risp: formData.risp,
+        errors: formData.errors,
+        notes: formData.notes,
+      },
+      createdAt: previousDraft?.record?.createdAt,
     }
   );
+
+  return {
+    formData,
+    warnings,
+    record,
+  };
+}
+
+function renderTeamMatchingSection(year) {
+  const draft = teamImportDrafts[year];
+  const unmatchedPlayers = draft?.record?.unmatchedPlayers || [];
+  if (!unmatchedPlayers.length) {
+    return "";
+  }
+
+  return `
+    <section class="team-match-panel">
+      <h3>선수명 매칭 필요</h3>
+      <div class="team-match-grid">
+        ${unmatchedPlayers
+          .map((name) => `
+            <label class="team-match-item">
+              <span>${escapeHtml(name)}</span>
+              <select data-player-match="${escapeHtml(name)}">
+                ${buildMatchingOptions(draft.record.matchingMap?.[name] || "")}
+              </select>
+            </label>
+          `)
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderTeamEntrySection(year) {
+  if (!isEditableYear(year)) {
+    return `
+      <section class="team-readonly-panel">
+        <h3>고정 데이터</h3>
+        <p>2022~2025 시즌은 기록 보존용 데이터로 수정할 수 없습니다.</p>
+      </section>
+    `;
+  }
+
+  const draft = teamImportDrafts[year];
+  const formData = getTeamDraftFormData(year);
+  const duplicate = draft?.record ? getExistingGameRecord(draft.record) : null;
+  const hasUnmatched = Boolean(draft?.record?.unmatchedPlayers?.length);
+
+  return `
+    <section class="team-entry-panel">
+      <div class="team-entry-header">
+        <h3>2026 경기 직접 입력</h3>
+        <p>게임원 URL 없이 날짜, 상대팀, 스코어와 선수별 기록을 직접 입력해 저장합니다.</p>
+      </div>
+      <div class="team-form-grid">
+        <label><span>경기 날짜</span><input id="team-record-date-${year}" type="date" value="${escapeHtml(formData.date)}"></label>
+        <label><span>상대팀</span><input id="team-record-opponent-${year}" type="text" value="${escapeHtml(formData.opponent)}" placeholder="상대팀"></label>
+        <label><span>득점</span><input id="team-record-score-for-${year}" type="number" min="0" value="${escapeHtml(formData.scoreFor)}"></label>
+        <label><span>실점</span><input id="team-record-score-against-${year}" type="number" min="0" value="${escapeHtml(formData.scoreAgainst)}"></label>
+        <label><span>득점권</span><input id="team-record-risp-${year}" type="text" value="${escapeHtml(formData.risp)}" placeholder="예: 7타수 3안타"></label>
+        <label><span>실책</span><input id="team-record-errors-${year}" type="number" min="0" value="${escapeHtml(formData.errors)}"></label>
+        <label class="team-form-wide"><span>비고</span><input id="team-record-notes-${year}" type="text" value="${escapeHtml(formData.notes)}" placeholder="비고"></label>
+        <label class="team-form-wide">
+          <span>선수 타격기록 입력</span>
+          <textarea id="team-record-batter-raw-${year}" rows="8" placeholder="선수	타석	타수	안타	2루타	3루타	홈런	타점	득점	도루	볼넷	사구	삼진	희생플라이	희생번트">${escapeHtml(formData.batterRaw)}</textarea>
+        </label>
+        <label class="team-form-wide">
+          <span>투수기록 입력</span>
+          <textarea id="team-record-pitcher-raw-${year}" rows="8" placeholder="선수	이닝	타자	타수	피안타	피홈런	볼넷	사구	탈삼진	실점	자책	결과">${escapeHtml(formData.pitcherRaw)}</textarea>
+        </label>
+      </div>
+      ${draft?.warnings?.length ? `<div class="team-form-warnings">${draft.warnings.map((warning) => `<p>${escapeHtml(warning)}</p>`).join("")}</div>` : ""}
+      ${renderTeamMatchingSection(year)}
+      <div class="team-entry-actions">
+        <button id="team-save-button-${year}" type="button"${hasUnmatched ? " disabled" : ""}>${duplicate ? "덮어쓰기 저장" : "경기 저장"}</button>
+      </div>
+    </section>
+  `;
 }
 
 function bindTeamYearActions(year) {
-  document.getElementById(`team-parse-button-${year}`)?.addEventListener("click", () => {
-    const sourceUrl = document.getElementById(`team-url-input-${year}`)?.value?.trim() || "";
-    const rawText = document.getElementById(`team-raw-input-${year}`)?.value || "";
-    const parsed = parseGameOneHtmlOrText(rawText);
-    const record = normalizeGameRecord(parsed, {
-      year,
-      sourceUrl,
-      sourceText: rawText,
-    });
+  if (isEditableYear(year)) {
+    document.getElementById(`team-save-button-${year}`)?.addEventListener("click", () => {
+      const draft = buildTeamDraftFromInputs(year);
+      teamImportDrafts[year] = draft;
 
-    teamImportDrafts[year] = {
-      sourceUrl,
-      rawText,
-      warnings: parsed.warnings,
-      record,
-    };
-    teamPageNotices[year] = "";
-    renderTeamYear(year);
-  });
-
-  document.getElementById(`team-save-button-${year}`)?.addEventListener("click", () => {
-    const record = collectTeamDraftFromInputs(year);
-    if (!record) {
-      return;
-    }
-
-    if (record.unmatchedPlayers.length) {
-      teamImportDrafts[year].record = record;
-      teamPageNotices[year] = "저장 전에 모든 선수명을 기존 선수와 매칭해 주세요.";
-      renderTeamYear(year);
-      return;
-    }
-
-    const result = saveGameRecord(record, { overwrite: Boolean(getExistingGameRecord(record)) });
-    if (!result.saved) {
-      teamPageNotices[year] = "이미 저장된 경기입니다. 확인 후 다시 저장해 주세요.";
-      renderTeamYear(year);
-      return;
-    }
-
-    recalculateCareerStatsFromGameLogs();
-    teamPageNotices[year] = result.duplicated ? "기존 경기 기록을 덮어썼습니다." : "경기 기록을 저장했습니다.";
-    delete teamImportDrafts[year];
-    renderTeamYear(year);
-  });
-
-  document.querySelectorAll("[data-player-match]").forEach((select) => {
-    select.addEventListener("change", () => {
-      const record = collectTeamDraftFromInputs(year);
-      if (!record) {
+      if (!draft.formData.date || !draft.formData.opponent.trim()) {
+        teamPageNotices[year] = "경기 날짜와 상대팀은 반드시 입력해 주세요.";
+        renderTeamYear(year);
         return;
       }
-      teamImportDrafts[year].record = record;
+
+      if (!draft.record.playerBattingRows.length && !draft.record.pitcherRows.length) {
+        teamPageNotices[year] = "저장할 선수 기록이 없습니다. 타격기록 또는 투수기록을 입력해 주세요.";
+        renderTeamYear(year);
+        return;
+      }
+
+      if (draft.record.unmatchedPlayers.length) {
+        teamPageNotices[year] = "저장 전에 모든 선수명을 기존 선수와 매칭해 주세요.";
+        renderTeamYear(year);
+        return;
+      }
+
+      const result = saveGameRecord(draft.record, { overwrite: Boolean(getExistingGameRecord(draft.record)) });
+      if (!result.saved) {
+        teamPageNotices[year] = result.readOnly
+          ? "과거 시즌은 수정할 수 없습니다."
+          : "이미 저장된 경기입니다. 확인 후 다시 저장해 주세요.";
+        renderTeamYear(year);
+        return;
+      }
+
+      recalculateCareerStatsFromGameLogs();
+      teamPageNotices[year] = result.duplicated ? "기존 경기 기록을 덮어썼습니다." : "경기 기록을 저장했습니다.";
+      delete teamImportDrafts[year];
       renderTeamYear(year);
     });
-  });
+
+    document.querySelectorAll("[data-player-match]").forEach((select) => {
+      select.addEventListener("change", () => {
+        const draft = buildTeamDraftFromInputs(year);
+        teamImportDrafts[year] = draft;
+        renderTeamYear(year);
+      });
+    });
+  }
 
   document.querySelectorAll("[data-toggle-game]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -2592,38 +2662,19 @@ function bindTeamYearActions(year) {
 
 function renderTeamYear(year) {
   const container = document.getElementById("page-container");
-  const notice = teamPageNotices[year]
-    ? `<div class="team-notice">${escapeHtml(teamPageNotices[year])}</div>`
-    : "";
-  const draft = teamImportDrafts[year];
+  const editable = isEditableYear(year);
+  const notice =
+    teamPageNotices[year] ||
+    (!editable ? "2022~2025 시즌은 기록 보존용 데이터로 수정할 수 없습니다." : "");
 
   container.innerHTML = `
     <section class="page team-page">
       <div class="page-header">
         <h2>팀기록 ${year}</h2>
-        <p>게임원 경기결과 주소와 표 원문을 붙여넣어 연도별 팀기록과 선수 경기 로그를 누적 저장합니다.</p>
+        <p>${editable ? "2026 시즌은 직접 입력 방식으로 경기 기록을 저장하고 통산에 반영합니다." : "과거 시즌은 고정 데이터만 조회할 수 있습니다."}</p>
       </div>
-      ${notice}
-      <section class="team-import-panel">
-        <div class="team-import-header">
-          <h3>게임원 경기결과 불러오기</h3>
-          <p>현재는 URL만으로 자동 수집하지 않고, URL과 표 원문 붙여넣기 방식으로 먼저 저장합니다.</p>
-        </div>
-        <div class="team-import-form">
-          <label class="team-edit-wide">
-            <span>게임원 경기결과 주소</span>
-            <input id="team-url-input-${year}" type="url" placeholder="https://..." value="${escapeHtml(draft?.sourceUrl || "")}">
-          </label>
-          <label class="team-edit-wide">
-            <span>경기결과 표 원문 붙여넣기</span>
-            <textarea id="team-raw-input-${year}" rows="10" placeholder="게임원 경기결과 페이지에서 표 영역을 복사해 붙여넣어 주세요.">${escapeHtml(draft?.rawText || "")}</textarea>
-          </label>
-          <div class="team-import-actions">
-            <button id="team-parse-button-${year}" type="button">변환 미리보기</button>
-          </div>
-        </div>
-        ${renderTeamImportPreview(year)}
-      </section>
+      ${notice ? `<div class="team-notice">${escapeHtml(notice)}</div>` : ""}
+      ${renderTeamEntrySection(year)}
       <section class="career-section">
         <div class="career-header">
           <h3>${year}년 경기 누적</h3>

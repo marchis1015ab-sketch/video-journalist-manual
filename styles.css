@@ -232,8 +232,8 @@ body {
   gap: 20px;
 }
 
-.team-import-panel,
-.team-import-preview,
+.team-entry-panel,
+.team-readonly-panel,
 .team-detail-block,
 .team-record-card,
 .team-notice {
@@ -243,48 +243,45 @@ body {
   box-shadow: 0 12px 28px rgba(16, 24, 40, 0.06);
 }
 
-.team-import-panel,
-.team-import-preview,
+.team-entry-panel,
+.team-readonly-panel,
 .team-notice {
   padding: 18px 20px;
 }
 
-.team-import-header,
-.team-import-preview-header {
+.team-entry-header,
+.team-readonly-panel {
   display: grid;
   gap: 4px;
   margin-bottom: 14px;
 }
 
-.team-import-header h3,
-.team-import-preview-header h3,
+.team-entry-header h3,
+.team-readonly-panel h3,
 .team-detail-block h4 {
   margin: 0;
 }
 
-.team-import-header p,
-.team-import-preview-header p,
+.team-entry-header p,
+.team-readonly-panel p,
 .team-notice {
   color: #475467;
   line-height: 1.5;
 }
 
-.team-import-form,
-.team-import-preview-tables,
+.team-form-grid,
 .team-record-detail-grid {
   display: grid;
   gap: 14px;
 }
 
-.team-edit-grid {
+.team-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
   gap: 12px;
-  margin-bottom: 14px;
 }
 
-.team-edit-grid label,
-.team-import-form label,
+.team-form-grid label,
 .team-match-item {
   display: grid;
   gap: 6px;
@@ -292,13 +289,12 @@ body {
   font-weight: 600;
 }
 
-.team-edit-wide {
+.team-form-wide {
   grid-column: 1 / -1;
 }
 
-.team-import-form input,
-.team-import-form textarea,
-.team-edit-grid input,
+.team-form-grid input,
+.team-form-grid textarea,
 .team-match-item select {
   width: 100%;
   border: 1px solid #d0d5dd;
@@ -309,18 +305,19 @@ body {
   background: #ffffff;
 }
 
-.team-import-form textarea {
+.team-form-grid textarea {
   resize: vertical;
-  min-height: 180px;
+  min-height: 160px;
 }
 
-.team-import-actions {
+.team-entry-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  margin-top: 14px;
 }
 
-.team-import-actions button,
+.team-entry-actions button,
 .team-toggle {
   border: 0;
   border-radius: 999px;
@@ -331,11 +328,11 @@ body {
   font-weight: 700;
 }
 
-.team-import-actions button {
+.team-entry-actions button {
   padding: 10px 16px;
 }
 
-.team-import-actions button:disabled {
+.team-entry-actions button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -344,25 +341,35 @@ body {
   padding: 6px 10px;
 }
 
-.team-import-warnings {
+.team-form-warnings {
   display: grid;
   gap: 8px;
-  margin-bottom: 14px;
+  margin-top: 14px;
   padding: 12px 14px;
   border-radius: 14px;
   background: #fff7ed;
   color: #9a3412;
 }
 
-.team-import-warnings p {
+.team-form-warnings p {
   margin: 0;
+}
+
+.team-match-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.team-match-panel h3 {
+  margin: 0;
+  font-size: 16px;
 }
 
 .team-match-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
   gap: 12px;
-  margin-bottom: 14px;
 }
 
 .team-notice {
@@ -406,8 +413,7 @@ body {
   padding: 14px;
 }
 
-.team-detail-block .table-wrap,
-.team-import-preview .table-wrap {
+.team-detail-block .table-wrap {
   margin-top: 10px;
 }
 
@@ -639,7 +645,7 @@ body {
     grid-template-columns: repeat(3, minmax(180px, 1fr));
   }
 
-  .team-edit-grid,
+  .team-form-grid,
   .team-match-grid,
   .team-record-detail-grid {
     grid-template-columns: 1fr;
@@ -684,8 +690,8 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .team-import-panel,
-  .team-import-preview,
+  .team-entry-panel,
+  .team-readonly-panel,
   .team-notice {
     padding: 16px;
   }
