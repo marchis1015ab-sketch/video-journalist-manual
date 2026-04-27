@@ -2498,6 +2498,8 @@ function collectTeamDraftFromInputs(year) {
     return null;
   }
 
+  const currentSourceUrl = document.getElementById(`team-url-input-${year}`)?.value?.trim() || draft.sourceUrl || "";
+  const currentRawText = document.getElementById(`team-raw-input-${year}`)?.value || draft.rawText || "";
   const matchingMap = { ...(draft.record.matchingMap || {}) };
   document.querySelectorAll("[data-player-match]").forEach((select) => {
     if (select.value) {
@@ -2505,14 +2507,24 @@ function collectTeamDraftFromInputs(year) {
     }
   });
 
+  const baseRecord =
+    currentSourceUrl !== (draft.sourceUrl || "") || currentRawText !== (draft.rawText || "")
+      ? normalizeGameRecord(parseGameOneHtmlOrText(currentRawText), {
+          year,
+          sourceUrl: currentSourceUrl,
+          sourceText: currentRawText,
+          matchingMap,
+        })
+      : draft.record;
+
   return normalizeGameRecord(
     {
-      ...draft.record,
-      sourceUrl: draft.sourceUrl,
-      sourceText: draft.rawText,
-      rawText: draft.rawText,
+      ...baseRecord,
+      sourceUrl: currentSourceUrl,
+      sourceText: currentRawText,
+      rawText: currentRawText,
       teamBattingSummary: {
-        ...(draft.record.teamBattingSummary || createEmptyTeamBattingSummary()),
+        ...(baseRecord.teamBattingSummary || createEmptyTeamBattingSummary()),
         risp: document.getElementById(`team-record-risp-${year}`)?.value || "",
         errors: document.getElementById(`team-record-errors-${year}`)?.value || 0,
         notes: document.getElementById(`team-record-notes-${year}`)?.value || "",
@@ -2520,20 +2532,20 @@ function collectTeamDraftFromInputs(year) {
     },
     {
       year,
-      sourceUrl: draft.sourceUrl,
-      sourceText: draft.rawText,
-      date: document.getElementById(`team-record-date-${year}`)?.value || draft.record.date,
-      opponent: document.getElementById(`team-record-opponent-${year}`)?.value || draft.record.opponent,
-      scoreFor: document.getElementById(`team-record-score-for-${year}`)?.value || draft.record.scoreFor,
-      scoreAgainst: document.getElementById(`team-record-score-against-${year}`)?.value || draft.record.scoreAgainst,
+      sourceUrl: currentSourceUrl,
+      sourceText: currentRawText,
+      date: document.getElementById(`team-record-date-${year}`)?.value || baseRecord.date,
+      opponent: document.getElementById(`team-record-opponent-${year}`)?.value || baseRecord.opponent,
+      scoreFor: document.getElementById(`team-record-score-for-${year}`)?.value || baseRecord.scoreFor,
+      scoreAgainst: document.getElementById(`team-record-score-against-${year}`)?.value || baseRecord.scoreAgainst,
       teamBattingSummary: {
-        ...(draft.record.teamBattingSummary || createEmptyTeamBattingSummary()),
+        ...(baseRecord.teamBattingSummary || createEmptyTeamBattingSummary()),
         risp: document.getElementById(`team-record-risp-${year}`)?.value || "",
         errors: document.getElementById(`team-record-errors-${year}`)?.value || 0,
         notes: document.getElementById(`team-record-notes-${year}`)?.value || "",
       },
       matchingMap,
-      createdAt: draft.record.createdAt,
+      createdAt: baseRecord.createdAt,
     }
   );
 }
@@ -2566,8 +2578,29 @@ function bindTeamYearActions(year) {
         return;
       }
 
+      const currentSourceUrl = document.getElementById(`team-url-input-${year}`)?.value?.trim() || "";
+      const currentRawText = document.getElementById(`team-raw-input-${year}`)?.value || "";
+      const draft = teamImportDrafts[year];
+      if (draft && (currentSourceUrl !== (draft.sourceUrl || "") || currentRawText !== (draft.rawText || ""))) {
+        teamImportDrafts[year] = {
+          sourceUrl: currentSourceUrl,
+          rawText: currentRawText,
+          warnings: parseGameOneHtmlOrText(currentRawText).warnings,
+          record,
+        };
+        teamPageNotices[year] = "URL 또는 표 원문이 변경되어 미리보기를 갱신했습니다. 내용을 확인한 뒤 다시 저장해 주세요.";
+        renderTeamYear(year);
+        return;
+      }
+
       if (!record.date || !String(record.opponent || "").trim()) {
         teamPageNotices[year] = "경기 날짜와 상대팀은 반드시 입력해 주세요.";
+        renderTeamYear(year);
+        return;
+      }
+
+      if (!record.playerBattingRows.length && !record.pitcherRows.length) {
+        teamPageNotices[year] = "저장할 선수 기록이 없습니다. 표 원문을 확인해 주세요.";
         renderTeamYear(year);
         return;
       }
