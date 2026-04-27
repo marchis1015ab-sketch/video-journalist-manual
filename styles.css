@@ -92,6 +92,13 @@ body {
   gap: 20px;
 }
 
+.ranking-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(260px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
 .page-header {
   display: grid;
   gap: 6px;
@@ -168,10 +175,6 @@ body {
   gap: 12px;
 }
 
-.ranking-block + .ranking-block {
-  margin-top: 4px;
-}
-
 .career-header h3 {
   margin: 0;
   font-size: 22px;
@@ -235,8 +238,37 @@ body {
   text-align: left;
 }
 
+.ranking-card {
+  border: 1px solid #d0d5dd;
+  border-radius: 18px;
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: 0 12px 28px rgba(16, 24, 40, 0.06);
+}
+
+.ranking-card h3 {
+  margin: 0;
+  padding: 10px 12px;
+  background: #d96b1c;
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.ranking-card .table-wrap {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .ranking-table {
-  min-width: 760px;
+  min-width: 420px;
+  font-size: 12px;
+}
+
+.ranking-table th,
+.ranking-table td {
+  padding: 4px 6px;
+  font-size: 12px;
 }
 
 .ranking-table td:first-child,
@@ -281,5 +313,15 @@ body {
   .page-header h2,
   .placeholder-panel h2 {
     font-size: 24px;
+  }
+
+  .ranking-grid {
+    grid-template-columns: repeat(2, minmax(240px, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .ranking-grid {
+    grid-template-columns: 1fr;
   }
 }

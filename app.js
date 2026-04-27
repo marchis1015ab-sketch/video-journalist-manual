@@ -267,6 +267,13 @@ const pitcherYearExtras = {
   },
 };
 
+const HITTER_YEAR_REQUIRED_PLAYERS = {
+  "2022": ["정원석", "주문철", "최대환"],
+  "2023": ["최대환"],
+  "2024": ["최대환", "한재혁", "강준형", "정병건"],
+  "2025": ["정해성", "최민우"],
+};
+
 function safeNumberLocal(value) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : 0;
@@ -314,6 +321,10 @@ function formatFractionalInnings(value) {
   return remainder === 1 ? `${whole} 1/3` : `${whole} 2/3`;
 }
 
+function sortNamesKo(names) {
+  return [...names].sort((left, right) => String(left || "").localeCompare(String(right || ""), "ko"));
+}
+
 function getHistoricalBatterRows(year) {
   if (
     typeof SOURCE_DATA === "undefined" ||
@@ -336,6 +347,49 @@ function getHistoricalPitcherRows(year) {
   }
 
   return SOURCE_DATA.historicalPitchersByYear[year];
+}
+
+function findPlayerMeta(type, name) {
+  const rowGetter = type === "pitcher" ? getHistoricalPitcherRows : getHistoricalBatterRows;
+
+  for (const year of CAREER_YEARS) {
+    const row = rowGetter(year).find((entry) => entry.player === name);
+    if (row) {
+      return row;
+    }
+  }
+
+  return null;
+}
+
+function getDisplayPlayersForYear(type, year) {
+  const names = new Set();
+  const rows = type === "pitcher" ? getHistoricalPitcherRows(year) : getHistoricalBatterRows(year);
+
+  rows.forEach((row) => {
+    if (row.player) {
+      names.add(row.player);
+    }
+  });
+
+  if (type === "hitter") {
+    if (typeof PLAYERS !== "undefined") {
+      PLAYERS.forEach((name) => names.add(name));
+    }
+    (HITTER_YEAR_REQUIRED_PLAYERS[year] || []).forEach((name) => names.add(name));
+  }
+
+  return sortNamesKo(names);
+}
+
+function getAllPlayersFromYearlyData(type) {
+  const names = new Set();
+
+  CAREER_YEARS.forEach((year) => {
+    getDisplayPlayersForYear(type, year).forEach((name) => names.add(name));
+  });
+
+  return sortNamesKo(names);
 }
 
 function getPlayerStatus(name) {
@@ -473,9 +527,47 @@ function toPitcherSeasonRow(year, row) {
   };
 }
 
+function createEmptyHitterDisplayRow(name) {
+  const meta = findPlayerMeta("hitter", name);
+
+  return {
+    name,
+    number: meta && meta.number !== "" && meta.number != null ? Number(meta.number) : "",
+    pos: meta ? meta.position || meta.hand || "" : "",
+    g: 0,
+    pa: 0,
+    ab: 0,
+    h: 0,
+    h1: 0,
+    d2: 0,
+    d3: 0,
+    hr: 0,
+    tb: 0,
+    rbi: 0,
+    r: 0,
+    sb: 0,
+    cs: 0,
+    sh: 0,
+    sf: 0,
+    bb: 0,
+    hbp: 0,
+    bbhbp: 0,
+    so: 0,
+    dp: 0,
+    avg: "0.000",
+    obp: "0.000",
+    slg: "0.000",
+    ops: "0.000",
+    status: getPlayerStatus(name),
+  };
+}
+
 function buildHitterYearData(year) {
-  return getHistoricalBatterRows(year).map((row) => {
-    const base = toHitterRow(row);
+  const yearRows = new Map(getHistoricalBatterRows(year).map((row) => [row.player, row]));
+
+  return getDisplayPlayersForYear("hitter", year).map((name) => {
+    const sourceRow = yearRows.get(name);
+    const base = sourceRow ? toHitterRow(sourceRow) : createEmptyHitterDisplayRow(name);
     const override = year === "2022" ? player2022Overrides[base.name] : null;
     return override ? { ...base, ...override, status: getPlayerStatus(base.name) } : base;
   });
@@ -562,183 +654,169 @@ function buildPitcherYearData(year) {
 }
 
 function buildCareerHitterData() {
-  const accumulator = new Map();
+  const players = getAllPlayersFromYearlyData("hitter");
 
-  CAREER_YEARS.forEach((year) => {
-    getHistoricalBatterRows(year).forEach((row) => {
-      const current = accumulator.get(row.player) || {
-        name: row.player,
-        G: 0,
-        PA: 0,
-        AB: 0,
-        H: 0,
-        H1: 0,
-        D2: 0,
-        D3: 0,
-        HR: 0,
-        TB: 0,
-        RBI: 0,
-        R: 0,
-        SB: 0,
-        CS: 0,
-        BB: 0,
-        HBP: 0,
-        BBHBP: 0,
-        SO: 0,
-        GIDP: 0,
-        SH: 0,
-        SF: 0,
-      };
+  return players.map((name) => {
+    const totals = {
+      G: 0,
+      PA: 0,
+      AB: 0,
+      H: 0,
+      H1: 0,
+      D2: 0,
+      D3: 0,
+      HR: 0,
+      TB: 0,
+      RBI: 0,
+      R: 0,
+      SB: 0,
+      CS: 0,
+      BB: 0,
+      HBP: 0,
+      BBHBP: 0,
+      SO: 0,
+      GIDP: 0,
+      SH: 0,
+      SF: 0,
+    };
 
-      current.G += safeNumberLocal(row.G);
-      current.PA += safeNumberLocal(row.PA);
-      current.AB += safeNumberLocal(row.AB);
-      current.H += safeNumberLocal(row.H);
-      current.H1 += safeNumberLocal(row.H1);
-      current.D2 += safeNumberLocal(row.D2);
-      current.D3 += safeNumberLocal(row.D3);
-      current.HR += safeNumberLocal(row.HR);
-      current.TB += safeNumberLocal(row.TB);
-      current.RBI += safeNumberLocal(row.RBI);
-      current.R += safeNumberLocal(row.R);
-      current.SB += safeNumberLocal(row.SB);
-      current.CS += safeNumberLocal(row.CS);
-      current.BB += safeNumberLocal(row.BB);
-      current.HBP += safeNumberLocal(row.HBP);
-      current.BBHBP += safeNumberLocal(row.BBHBP);
-      current.SO += safeNumberLocal(row.SO);
-      current.GIDP += safeNumberLocal(row.GIDP);
-      current.SH += safeNumberLocal(row.SH);
-      current.SF += safeNumberLocal(row.SF);
-
-      accumulator.set(row.player, current);
+    CAREER_YEARS.forEach((year) => {
+      const row = (hitterDataByYear[year] || []).find((entry) => entry.name === name) || createEmptyHitterDisplayRow(name);
+      totals.G += safeNumberLocal(row.g);
+      totals.PA += safeNumberLocal(row.pa);
+      totals.AB += safeNumberLocal(row.ab);
+      totals.H += safeNumberLocal(row.h);
+      totals.H1 += safeNumberLocal(row.h1);
+      totals.D2 += safeNumberLocal(row.d2);
+      totals.D3 += safeNumberLocal(row.d3);
+      totals.HR += safeNumberLocal(row.hr);
+      totals.TB += safeNumberLocal(row.tb);
+      totals.RBI += safeNumberLocal(row.rbi);
+      totals.R += safeNumberLocal(row.r);
+      totals.SB += safeNumberLocal(row.sb);
+      totals.CS += safeNumberLocal(row.cs);
+      totals.BB += safeNumberLocal(row.bb);
+      totals.HBP += safeNumberLocal(row.hbp);
+      totals.BBHBP += safeNumberLocal(row.bbhbp);
+      totals.SO += safeNumberLocal(row.so);
+      totals.GIDP += safeNumberLocal(row.dp);
+      totals.SH += safeNumberLocal(row.sh);
+      totals.SF += safeNumberLocal(row.sf);
     });
-  });
 
-  const order = mergeCareerPlayerOrder("hitter", accumulator);
-  return order
-    .filter((name) => accumulator.has(name))
-    .map((name) => {
-      const stats = accumulator.get(name);
-      const calculated = calcBatting(stats);
-      return {
-        name,
-        g: stats.G,
-        pa: stats.PA,
-        ab: stats.AB,
-        h: stats.H,
-        h1: stats.H1,
-        d2: stats.D2,
-        d3: stats.D3,
-        hr: stats.HR,
-        tb: calculated.TB,
-        rbi: stats.RBI,
-        r: stats.R,
-        sb: stats.SB,
-        cs: stats.CS,
-        bb: stats.BB,
-        hbp: stats.HBP,
-        bbhbp: calculated.BBHBP,
-        so: stats.SO,
-        dp: stats.GIDP,
-        avg: formatDecimal(calculated.AVG),
-        obp: formatDecimal(calculated.OBP),
-        slg: formatDecimal(calculated.SLG),
-        ops: formatDecimal(calculated.OPS),
-        rc: formatDecimal(calculated.RC),
-        rc18: formatDecimal(calculated.RC18),
-        xr: formatDecimal(calculated.XR),
-        status: getPlayerStatus(name),
-      };
-    })
-    .filter((row) => row.g > 0);
+    const calculated = calcBatting(totals);
+    return {
+      name,
+      g: totals.G,
+      pa: totals.PA,
+      ab: totals.AB,
+      h: totals.H,
+      h1: totals.H1,
+      d2: totals.D2,
+      d3: totals.D3,
+      hr: totals.HR,
+      tb: calculated.TB,
+      rbi: totals.RBI,
+      r: totals.R,
+      sb: totals.SB,
+      cs: totals.CS,
+      bb: totals.BB,
+      hbp: totals.HBP,
+      bbhbp: calculated.BBHBP,
+      so: totals.SO,
+      dp: totals.GIDP,
+      avg: formatDecimal(calculated.AVG),
+      obp: formatDecimal(calculated.OBP),
+      slg: formatDecimal(calculated.SLG),
+      ops: formatDecimal(calculated.OPS),
+      rc: formatDecimal(calculated.RC),
+      rc18: formatDecimal(calculated.RC18),
+      xr: formatDecimal(calculated.XR),
+      status: getPlayerStatus(name),
+    };
+  });
 }
 
 function buildCareerPitcherData() {
-  const accumulator = new Map();
+  const players = getAllPlayersFromYearlyData("pitcher");
 
-  CAREER_YEARS.forEach((year) => {
-    getHistoricalPitcherRows(year).forEach((row) => {
-      const current = accumulator.get(row.player) || {
-        name: row.player,
-        G: 0,
-        GS: 0,
-        GR: 0,
-        W: 0,
-        L: 0,
-        SV: 0,
-        HLD: 0,
-        IP: 0,
-        BF: 0,
-        AB: 0,
-        H: 0,
-        HR: 0,
-        BB: 0,
-        HBP: 0,
-        SO: 0,
-        R: 0,
-        ER: 0,
-      };
+  return players.map((name) => {
+    const totals = {
+      G: 0,
+      GS: 0,
+      GR: 0,
+      W: 0,
+      L: 0,
+      SV: 0,
+      HLD: 0,
+      IP: 0,
+      BF: 0,
+      AB: 0,
+      H: 0,
+      HR: 0,
+      BB: 0,
+      HBP: 0,
+      SO: 0,
+      R: 0,
+      ER: 0,
+    };
 
-      current.G += safeNumberLocal(row.G);
-      current.GS += safeNumberLocal(row.GS);
-      current.GR += safeNumberLocal(row.GR);
-      current.W += safeNumberLocal(row.W);
-      current.L += safeNumberLocal(row.L);
-      current.SV += safeNumberLocal(row.SV);
-      current.HLD += safeNumberLocal(row.HLD);
-      current.IP += safeNumberLocal(row.IP);
-      current.BF += safeNumberLocal(row.BF);
-      current.AB += safeNumberLocal(row.AB);
-      current.H += safeNumberLocal(row.H);
-      current.HR += safeNumberLocal(row.HR);
-      current.BB += safeNumberLocal(row.BB);
-      current.HBP += safeNumberLocal(row.HBP);
-      current.SO += safeNumberLocal(row.SO);
-      current.R += safeNumberLocal(row.R);
-      current.ER += safeNumberLocal(row.ER);
+    CAREER_YEARS.forEach((year) => {
+      const row = (pitcherDataByYear[year] || []).find((entry) => entry.name === name);
+      if (!row || row.isTotal) {
+        return;
+      }
 
-      accumulator.set(row.player, current);
+      totals.G += safeNumberLocal(row.g);
+      totals.GS += safeNumberLocal(row.gs);
+      totals.GR += safeNumberLocal(row.gr);
+      totals.W += safeNumberLocal(row.w);
+      totals.L += safeNumberLocal(row.l);
+      totals.SV += safeNumberLocal(row.sv);
+      totals.HLD += safeNumberLocal(row.hld);
+      totals.IP += safeNumberLocal(row.ip);
+      totals.BF += safeNumberLocal(row.bf);
+      totals.AB += safeNumberLocal(row.ab);
+      totals.H += safeNumberLocal(row.h);
+      totals.HR += safeNumberLocal(row.hr);
+      totals.BB += safeNumberLocal(row.bb);
+      totals.HBP += safeNumberLocal(row.hbp);
+      totals.SO += safeNumberLocal(row.so);
+      totals.R += safeNumberLocal(row.r);
+      totals.ER += safeNumberLocal(row.er);
     });
-  });
 
-  const order = mergeCareerPlayerOrder("pitcher", accumulator);
-  return order
-    .filter((name) => accumulator.has(name))
-    .map((name) => {
-      const stats = accumulator.get(name);
-      const calculated = calcPitching(stats);
-      return {
-        name,
-        g: stats.G,
-        gs: stats.GS,
-        gr: stats.GR,
-        w: stats.W,
-        l: stats.L,
-        sv: stats.SV,
-        hld: stats.HLD,
-        ip: stats.IP,
-        ipDisplay: formatFractionalInnings(stats.IP),
-        bf: stats.BF,
-        ab: stats.AB,
-        h: stats.H,
-        hr: stats.HR,
-        bb: stats.BB,
-        hbp: stats.HBP,
-        so: stats.SO,
-        r: stats.R,
-        er: stats.ER,
-        winPct: formatWinPct(stats.W, stats.L),
-        era: stats.IP ? formatEraOrWhip(calculated.ERA, 2) : "#DIV/0!",
-        ra7: stats.IP ? formatEraOrWhip((stats.R * 7) / stats.IP, 2) : "#DIV/0!",
-        bb7: stats.IP ? ((stats.BB * 7) / stats.IP).toFixed(3) : "#DIV/0!",
-        k7: stats.IP ? ((stats.SO * 7) / stats.IP).toFixed(3) : "#DIV/0!",
-        whip: stats.IP ? formatEraOrWhip(calculated.WHIP, 2) : "#DIV/0!",
-        baa: stats.AB ? (stats.H / stats.AB).toFixed(3) : "#DIV/0!",
-        status: getPlayerStatus(name),
-      };
-    })
-    .filter((row) => row.g > 0);
+    const calculated = calcPitching(totals);
+    return {
+      name,
+      g: totals.G,
+      gs: totals.GS,
+      gr: totals.GR,
+      w: totals.W,
+      l: totals.L,
+      sv: totals.SV,
+      hld: totals.HLD,
+      ip: totals.IP,
+      ipDisplay: formatFractionalInnings(totals.IP),
+      bf: totals.BF,
+      ab: totals.AB,
+      h: totals.H,
+      hr: totals.HR,
+      bb: totals.BB,
+      hbp: totals.HBP,
+      so: totals.SO,
+      r: totals.R,
+      er: totals.ER,
+      winPct: formatWinPct(totals.W, totals.L),
+      era: totals.IP ? formatEraOrWhip(calculated.ERA, 2) : "#DIV/0!",
+      ra7: totals.IP ? formatEraOrWhip((totals.R * 7) / totals.IP, 2) : "#DIV/0!",
+      bb7: totals.IP ? ((totals.BB * 7) / totals.IP).toFixed(3) : "#DIV/0!",
+      k7: totals.IP ? ((totals.SO * 7) / totals.IP).toFixed(3) : "#DIV/0!",
+      whip: totals.IP ? formatEraOrWhip(calculated.WHIP, 2) : "#DIV/0!",
+      baa: totals.AB ? (totals.H / totals.AB).toFixed(3) : "#DIV/0!",
+      status: getPlayerStatus(name),
+    };
+  });
 }
 
 const player2022 = buildHitterYearData("2022");
@@ -750,9 +828,6 @@ const pitcher2022 = buildPitcherYearData("2022");
 const pitcher2023 = buildPitcherYearData("2023");
 const pitcher2024 = buildPitcherYearData("2024");
 const pitcher2025 = buildPitcherYearData("2025");
-
-const careerHitters2022To2025 = buildCareerHitterData();
-const careerPitchers2022To2025 = buildCareerPitcherData();
 
 const hitterDataByYear = {
   "2022": player2022,
@@ -767,6 +842,9 @@ const pitcherDataByYear = {
   "2024": pitcher2024,
   "2025": pitcher2025,
 };
+
+const careerHitters2022To2025 = buildCareerHitterData();
+const careerPitchers2022To2025 = buildCareerPitcherData();
 
 function sortRowsByName(rows) {
   return [...rows].sort((left, right) =>
@@ -979,7 +1057,7 @@ function createRankingTableMarkup(entries, changes) {
           <th>순위</th>
           <th>선수</th>
           <th>수치</th>
-          <th>지난경기 대비</th>
+          <th>변동</th>
         </tr>
       </thead>
       <tbody>${rowsHtml}</tbody>
@@ -1082,10 +1160,8 @@ function renderRank(type) {
       snapshots[config.key] = currentSnapshot;
 
       return `
-        <section class="career-section ranking-block">
-          <div class="career-header">
-            <h3>${config.label}</h3>
-          </div>
+        <section class="ranking-card">
+          <h3>${config.label}</h3>
           <div class="table-wrap">
             ${createRankingTableMarkup(entries, changes)}
           </div>
@@ -1101,7 +1177,9 @@ function renderRank(type) {
         <h2>통산순위 ${label}</h2>
         <p>2022년~2025년 통산기록표를 기준으로 계산한 항목별 순위입니다.</p>
       </div>
-      ${blocksHtml}
+      <div class="ranking-grid">
+        ${blocksHtml}
+      </div>
     </section>
   `;
 
