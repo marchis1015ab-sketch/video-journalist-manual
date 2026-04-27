@@ -873,6 +873,10 @@ function getVisibleHitterRows(year) {
   return (hitterDataByYear[year] || []).filter((row) => safeNumberLocal(row.g) > 0);
 }
 
+function getVisibleCareerHitterRows() {
+  return careerHitters2022To2025.filter((row) => safeNumberLocal(row.g) > 0);
+}
+
 function setActiveMenu() {
   document.querySelectorAll(".menu-item").forEach((item) => {
     item.classList.toggle("active", item.dataset.menu === state.menu);
@@ -1106,7 +1110,7 @@ function renderCareerPage(type) {
   const isPitcher = type === "pitcher";
   const title = isPitcher ? "투수 통산" : "타자 통산";
   const rows = sortRowsByName(
-    isPitcher ? careerPitchers2022To2025 : careerHitters2022To2025
+    isPitcher ? careerPitchers2022To2025 : getVisibleCareerHitterRows()
   );
   const columns = isPitcher ? careerPitcherColumns : careerHitterColumns;
   const container = document.getElementById("page-container");
@@ -1162,7 +1166,7 @@ function renderTotal() {
 function renderRank(type) {
   const isPitcher = type === "pitcher";
   const label = isPitcher ? "투수" : "타자";
-  const rows = isPitcher ? careerPitchers2022To2025 : careerHitters2022To2025;
+  const rows = isPitcher ? careerPitchers2022To2025 : getVisibleCareerHitterRows();
   const configs = isPitcher ? pitcherRankConfigs : hitterRankConfigs;
   const snapshots = {};
 
