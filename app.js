@@ -1115,7 +1115,7 @@ function insertTopTenSeparator(entries) {
   }
 
   const cloned = [...entries];
-  cloned.splice(actualIndex + 1, 0, createSeparatorEntry("top10", "10위 구분선"));
+  cloned.splice(actualIndex + 1, 0, createSeparatorEntry("top-ten-divider", "10위권 구분선"));
   return cloned;
 }
 
@@ -1146,7 +1146,7 @@ function buildRankingEntries(rows, config, type) {
 
     return [
       ...qualifiedEntries,
-      createSeparatorEntry("under-qualified", "규정타석 미달"),
+      createSeparatorEntry("qualification-divider", "규정타석 미달"),
       ...underQualifiedEntries,
     ];
   }
@@ -1176,7 +1176,7 @@ function createRankingTableMarkup(entries, changes) {
     .map((entry) => {
       if (entry.type === "separator") {
         return `
-          <tr class="separator-row ${entry.separatorKind}">
+          <tr class="${entry.separatorKind}">
             <td colspan="4">${entry.label}</td>
           </tr>
         `;
@@ -1198,10 +1198,10 @@ function createRankingTableMarkup(entries, changes) {
 
       return `
         <tr${classAttr}>
-          <td>${entry.rankDisplay ?? entry.rank ?? ""}</td>
-          <td>${entry.name}</td>
-          <td>${entry.value == null ? "" : entry.value}</td>
-          <td><span class="rank-change ${change.className}">${change.text} ${change.symbol}</span></td>
+          <td class="rank-col">${entry.rankDisplay ?? entry.rank ?? ""}</td>
+          <td class="name-col">${entry.name}</td>
+          <td class="value-col">${entry.value == null ? "" : entry.value}</td>
+          <td class="change-col"><span class="rank-change ${change.className}" aria-label="${change.text}">${change.symbol}</span></td>
         </tr>
       `;
     })
@@ -1211,10 +1211,10 @@ function createRankingTableMarkup(entries, changes) {
     <table class="stats-table ranking-table">
       <thead>
         <tr>
-          <th>순위</th>
-          <th>선수</th>
-          <th>수치</th>
-          <th>변동</th>
+          <th class="rank-col">순위</th>
+          <th class="name-col">선수</th>
+          <th class="value-col">수치</th>
+          <th class="change-col">변동</th>
         </tr>
       </thead>
       <tbody>${rowsHtml}</tbody>

@@ -262,6 +262,7 @@ body {
 }
 
 .ranking-table {
+  min-width: 0;
   width: 100%;
   table-layout: fixed;
   font-size: 11px;
@@ -271,33 +272,33 @@ body {
 .ranking-table td {
   padding: 2px 3px;
   font-size: 11px;
+  white-space: nowrap;
 }
 
-.ranking-table td:first-child,
-.ranking-table th:first-child {
-  width: 28px;
-  min-width: 28px;
+.rank-col {
+  width: 26px;
+  min-width: 26px;
   text-align: center;
 }
 
-.ranking-table td:nth-child(2) {
-  max-width: 70px;
+.name-col {
+  width: 58px;
+  min-width: 58px;
+  max-width: 58px;
   text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.ranking-card th:nth-child(3),
-.ranking-card td:nth-child(3) {
-  width: 50px;
-  min-width: 50px;
+.value-col {
+  width: 48px;
+  min-width: 48px;
   text-align: right;
   padding: 2px 4px;
 }
 
-.ranking-card th:nth-child(4),
-.ranking-card td:nth-child(4) {
+.change-col {
   width: 22px;
   min-width: 22px;
   max-width: 22px;
@@ -307,6 +308,8 @@ body {
 }
 
 .rank-change {
+  display: inline-block;
+  width: 100%;
   font-weight: 700;
 }
 
@@ -322,16 +325,25 @@ body {
   color: #6b7280;
 }
 
-.separator-row td {
-  background: #fff7ed;
-  color: #9a3412;
-  font-weight: 700;
+.top-ten-divider td,
+.qualification-divider td {
   text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  background: #111111;
+  color: #ffffff;
 }
 
-.separator-row.under-qualified td {
-  background: #f3f4f6;
-  color: #4b5563;
+.top-ten-divider td {
+  background: #fff7ed;
+  color: #9a3412;
+  background: #111111;
+  color: #ffffff;
+}
+
+.qualification-divider td {
+  background: #111111;
+  color: #ffffff;
 }
 
 .qualified-highlight td {
