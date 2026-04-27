@@ -123,6 +123,61 @@ const careerPitcherColumns = [
   { label: "WHIP", key: "whip" },
 ];
 
+const hitterRankConfigs = [
+  { key: "g", label: "경기수" },
+  { key: "pa", label: "타석" },
+  { key: "ab", label: "타수" },
+  { key: "h", label: "총안타" },
+  { key: "h1", label: "안타" },
+  { key: "d2", label: "2루타" },
+  { key: "d3", label: "3루타" },
+  { key: "hr", label: "홈런" },
+  { key: "tb", label: "루타" },
+  { key: "rbi", label: "타점" },
+  { key: "r", label: "득점" },
+  { key: "sb", label: "도루" },
+  { key: "cs", label: "도루실패" },
+  { key: "bb", label: "볼넷" },
+  { key: "hbp", label: "사구" },
+  { key: "bbhbp", label: "사사구" },
+  { key: "so", label: "삼진" },
+  { key: "dp", label: "병살" },
+  { key: "avg", label: "AVG" },
+  { key: "obp", label: "출루율" },
+  { key: "slg", label: "장타율" },
+  { key: "ops", label: "OPS" },
+  { key: "rc", label: "RC" },
+  { key: "rc18", label: "RC/18" },
+  { key: "xr", label: "XR" },
+];
+
+const pitcherRankConfigs = [
+  { key: "g", label: "출장" },
+  { key: "gs", label: "선발" },
+  { key: "gr", label: "구원" },
+  { key: "w", label: "승" },
+  { key: "l", label: "패" },
+  { key: "sv", label: "세이브" },
+  { key: "hld", label: "홀드" },
+  { key: "ip", label: "이닝", displayKey: "ipDisplay" },
+  { key: "bf", label: "타자" },
+  { key: "ab", label: "타수" },
+  { key: "h", label: "피안타" },
+  { key: "hr", label: "피홈런" },
+  { key: "bb", label: "볼넷" },
+  { key: "hbp", label: "사구" },
+  { key: "so", label: "삼진" },
+  { key: "r", label: "실점" },
+  { key: "er", label: "자책점" },
+  { key: "winPct", label: "승률" },
+  { key: "era", label: "ERA", lowerIsBetter: true },
+  { key: "ra7", label: "RA7", lowerIsBetter: true },
+  { key: "bb7", label: "BB/7", lowerIsBetter: true },
+  { key: "k7", label: "K/7" },
+  { key: "whip", label: "WHIP", lowerIsBetter: true },
+  { key: "baa", label: "피안타율", lowerIsBetter: true },
+];
+
 const player2022Overrides = {
   "김성민": {
     name: "김성민",
@@ -572,6 +627,7 @@ function buildCareerHitterData() {
         pa: stats.PA,
         ab: stats.AB,
         h: stats.H,
+        h1: stats.H1,
         d2: stats.D2,
         d3: stats.D3,
         hr: stats.HR,
@@ -661,6 +717,7 @@ function buildCareerPitcherData() {
         l: stats.L,
         sv: stats.SV,
         hld: stats.HLD,
+        ip: stats.IP,
         ipDisplay: formatFractionalInnings(stats.IP),
         bf: stats.BF,
         ab: stats.AB,
@@ -671,8 +728,13 @@ function buildCareerPitcherData() {
         so: stats.SO,
         r: stats.R,
         er: stats.ER,
+        winPct: formatWinPct(stats.W, stats.L),
         era: stats.IP ? formatEraOrWhip(calculated.ERA, 2) : "#DIV/0!",
+        ra7: stats.IP ? formatEraOrWhip((stats.R * 7) / stats.IP, 2) : "#DIV/0!",
+        bb7: stats.IP ? ((stats.BB * 7) / stats.IP).toFixed(3) : "#DIV/0!",
+        k7: stats.IP ? ((stats.SO * 7) / stats.IP).toFixed(3) : "#DIV/0!",
         whip: stats.IP ? formatEraOrWhip(calculated.WHIP, 2) : "#DIV/0!",
+        baa: stats.AB ? (stats.H / stats.AB).toFixed(3) : "#DIV/0!",
         status: getPlayerStatus(name),
       };
     })
@@ -806,6 +868,125 @@ function createTableMarkup(columns, rows) {
   `;
 }
 
+function getRankingSnapshotKey(type, statKey) {
+  return `recordSystem.v3.rankSnapshot.${type}.${statKey}`;
+}
+
+function loadRankingSnapshot(type, statKey) {
+  if (typeof localStorage === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = localStorage.getItem(getRankingSnapshotKey(type, statKey));
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    console.warn("순위 snapshot 로드 실패:", type, statKey, error);
+    return null;
+  }
+}
+
+function saveRankingSnapshot(type, rankingsByStat) {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+
+  Object.entries(rankingsByStat).forEach(([statKey, snapshot]) => {
+    try {
+      localStorage.setItem(getRankingSnapshotKey(type, statKey), JSON.stringify(snapshot));
+    } catch (error) {
+      console.warn("순위 snapshot 저장 실패:", type, statKey, error);
+    }
+  });
+}
+
+function compareRankChange(currentRank, previousRank) {
+  if (!previousRank || previousRank === currentRank) {
+    return { symbol: "—", text: "변동없음", className: "same" };
+  }
+
+  if (currentRank < previousRank) {
+    return { symbol: "▲", text: "상승", className: "up" };
+  }
+
+  return { symbol: "▼", text: "하강", className: "down" };
+}
+
+function normalizeRankingValue(value) {
+  if (value === "" || value == null || value === "#DIV/0!") {
+    return null;
+  }
+
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function buildRankingEntries(rows, config) {
+  const sortedRows = [...rows].sort((left, right) => {
+    const leftValue = normalizeRankingValue(left[config.key]);
+    const rightValue = normalizeRankingValue(right[config.key]);
+
+    if (leftValue == null && rightValue == null) {
+      return String(left.name || "").localeCompare(String(right.name || ""), "ko");
+    }
+    if (leftValue == null) {
+      return 1;
+    }
+    if (rightValue == null) {
+      return -1;
+    }
+    if (leftValue === rightValue) {
+      return String(left.name || "").localeCompare(String(right.name || ""), "ko");
+    }
+
+    return config.lowerIsBetter ? leftValue - rightValue : rightValue - leftValue;
+  });
+
+  return sortedRows.map((row, index) => ({
+    rank: index + 1,
+    name: row.name,
+    value: row[config.displayKey || config.key],
+    status: row.status || "active",
+  }));
+}
+
+function createRankingTableMarkup(entries, changes) {
+  const rowsHtml = entries
+    .map((entry) => {
+      const classNames = [];
+      if (entry.status === "retired" || entry.status === "injured") {
+        classNames.push(entry.status);
+      }
+
+      const change = changes[entry.name] || { symbol: "—", text: "변동없음", className: "same" };
+      const classAttr = classNames.length ? ` class="${classNames.join(" ")}"` : "";
+
+      return `
+        <tr${classAttr}>
+          <td>${entry.rank}</td>
+          <td>${entry.name}</td>
+          <td>${entry.value == null ? "" : entry.value}</td>
+          <td><span class="rank-change ${change.className}">${change.text} ${change.symbol}</span></td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  return `
+    <table class="stats-table ranking-table">
+      <thead>
+        <tr>
+          <th>순위</th>
+          <th>선수</th>
+          <th>수치</th>
+          <th>지난경기 대비</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
+}
+
 function renderStatsTable({ year, subtitle, columns, rows }) {
   renderPlayerShell(year, subtitle);
   const tableWrap = document.querySelector(".table-wrap");
@@ -880,8 +1061,51 @@ function renderTotal() {
 }
 
 function renderRank(type) {
-  const label = type === "hitter" ? "타자" : "투수";
-  renderPlaceholder(`통산순위 ${label}`, `통산순위 - ${label} 영역입니다.`);
+  const isPitcher = type === "pitcher";
+  const label = isPitcher ? "투수" : "타자";
+  const rows = isPitcher ? careerPitchers2022To2025 : careerHitters2022To2025;
+  const configs = isPitcher ? pitcherRankConfigs : hitterRankConfigs;
+  const snapshots = {};
+
+  const blocksHtml = configs
+    .map((config) => {
+      const previousSnapshot = loadRankingSnapshot(type, config.key) || {};
+      const entries = buildRankingEntries(rows, config);
+      const currentSnapshot = {};
+      const changes = {};
+
+      entries.forEach((entry) => {
+        currentSnapshot[entry.name] = entry.rank;
+        changes[entry.name] = compareRankChange(entry.rank, previousSnapshot[entry.name]);
+      });
+
+      snapshots[config.key] = currentSnapshot;
+
+      return `
+        <section class="career-section ranking-block">
+          <div class="career-header">
+            <h3>${config.label}</h3>
+          </div>
+          <div class="table-wrap">
+            ${createRankingTableMarkup(entries, changes)}
+          </div>
+        </section>
+      `;
+    })
+    .join("");
+
+  const container = document.getElementById("page-container");
+  container.innerHTML = `
+    <section class="page ranking-page">
+      <div class="page-header">
+        <h2>통산순위 ${label}</h2>
+        <p>2022년~2025년 통산기록표를 기준으로 계산한 항목별 순위입니다.</p>
+      </div>
+      ${blocksHtml}
+    </section>
+  `;
+
+  saveRankingSnapshot(type, snapshots);
 }
 
 function renderCurrentPage() {

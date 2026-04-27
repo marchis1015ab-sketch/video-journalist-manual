@@ -88,6 +88,10 @@ body {
   gap: 24px;
 }
 
+.ranking-page {
+  gap: 20px;
+}
+
 .page-header {
   display: grid;
   gap: 6px;
@@ -164,6 +168,10 @@ body {
   gap: 12px;
 }
 
+.ranking-block + .ranking-block {
+  margin-top: 4px;
+}
+
 .career-header h3 {
   margin: 0;
   font-size: 22px;
@@ -225,6 +233,35 @@ body {
 .stats-table td:first-child {
   font-weight: 700;
   text-align: left;
+}
+
+.ranking-table {
+  min-width: 760px;
+}
+
+.ranking-table td:first-child,
+.ranking-table th:first-child {
+  text-align: center;
+}
+
+.ranking-table td:nth-child(2) {
+  text-align: left;
+}
+
+.rank-change {
+  font-weight: 700;
+}
+
+.rank-change.up {
+  color: #15803d;
+}
+
+.rank-change.down {
+  color: #dc2626;
+}
+
+.rank-change.same {
+  color: #6b7280;
 }
 
 @media (max-width: 900px) {
