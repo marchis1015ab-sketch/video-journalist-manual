@@ -94,8 +94,8 @@ body {
 
 .ranking-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(260px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(6, minmax(180px, 1fr));
+  gap: 8px;
   align-items: start;
 }
 
@@ -239,10 +239,11 @@ body {
 }
 
 .ranking-card {
+  min-width: 0;
   border: 1px solid #d0d5dd;
   border-radius: 18px;
   background: #ffffff;
-  overflow: hidden;
+  overflow-x: auto;
   box-shadow: 0 12px 28px rgba(16, 24, 40, 0.06);
 }
 
@@ -262,13 +263,14 @@ body {
 
 .ranking-table {
   min-width: 420px;
-  font-size: 12px;
+  width: 100%;
+  font-size: 11px;
 }
 
 .ranking-table th,
 .ranking-table td {
-  padding: 4px 6px;
-  font-size: 12px;
+  padding: 3px 4px;
+  font-size: 11px;
 }
 
 .ranking-table td:first-child,
@@ -296,6 +298,33 @@ body {
   color: #6b7280;
 }
 
+.separator-row td {
+  background: #fff7ed;
+  color: #9a3412;
+  font-weight: 700;
+  text-align: center;
+}
+
+.separator-row.under-qualified td {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.qualified-highlight td {
+  background: #fff3bf;
+}
+
+.under-qualified td {
+  color: #6b7280;
+  background: #f8fafc;
+}
+
+@media (max-width: 1200px) {
+  .ranking-grid {
+    grid-template-columns: repeat(3, minmax(180px, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   .layout {
     flex-direction: column;
@@ -314,13 +343,9 @@ body {
   .placeholder-panel h2 {
     font-size: 24px;
   }
-
-  .ranking-grid {
-    grid-template-columns: repeat(2, minmax(240px, 1fr));
-  }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .ranking-grid {
     grid-template-columns: 1fr;
   }

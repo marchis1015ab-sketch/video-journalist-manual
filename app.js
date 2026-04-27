@@ -8,6 +8,8 @@ const state = {
 };
 
 const CAREER_YEARS = ["2022", "2023", "2024", "2025"];
+const CURRENT_GAMES = 78;
+const REQUIRED_PA = CURRENT_GAMES * 1.5;
 
 const hitterColumns = [
   { label: "이름", key: "name" },
@@ -142,13 +144,13 @@ const hitterRankConfigs = [
   { key: "bbhbp", label: "사사구" },
   { key: "so", label: "삼진" },
   { key: "dp", label: "병살" },
-  { key: "avg", label: "AVG" },
-  { key: "obp", label: "출루율" },
-  { key: "slg", label: "장타율" },
-  { key: "ops", label: "OPS" },
-  { key: "rc", label: "RC" },
-  { key: "rc18", label: "RC/18" },
-  { key: "xr", label: "XR" },
+  { key: "avg", label: "AVG", separateQualification: true },
+  { key: "obp", label: "출루율", separateQualification: true },
+  { key: "slg", label: "장타율", separateQualification: true },
+  { key: "ops", label: "OPS", separateQualification: true },
+  { key: "rc", label: "RC", qualificationHighlight: true },
+  { key: "rc18", label: "RC/18", qualificationHighlight: true },
+  { key: "xr", label: "XR", qualificationHighlight: true },
 ];
 
 const pitcherRankConfigs = [
@@ -877,6 +879,10 @@ function getVisibleCareerHitterRows() {
   return careerHitters2022To2025.filter((row) => safeNumberLocal(row.g) > 0);
 }
 
+function isQualifiedBatter(row) {
+  return safeNumberLocal(row.pa) >= REQUIRED_PA;
+}
+
 function setActiveMenu() {
   document.querySelectorAll(".menu-item").forEach((item) => {
     item.classList.toggle("active", item.dataset.menu === state.menu);
@@ -1024,8 +1030,8 @@ function normalizeRankingValue(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-function buildRankingEntries(rows, config) {
-  const sortedRows = [...rows].sort((left, right) => {
+function sortRankingRows(rows, config) {
+  return [...rows].sort((left, right) => {
     const leftValue = normalizeRankingValue(left[config.key]);
     const rightValue = normalizeRankingValue(right[config.key]);
 
@@ -1044,21 +1050,147 @@ function buildRankingEntries(rows, config) {
 
     return config.lowerIsBetter ? leftValue - rightValue : rightValue - leftValue;
   });
+}
 
-  return sortedRows.map((row, index) => ({
-    rank: index + 1,
-    name: row.name,
-    value: row[config.displayKey || config.key],
-    status: row.status || "active",
-  }));
+function createSeparatorEntry(kind, label) {
+  return {
+    type: "separator",
+    separatorKind: kind,
+    label,
+  };
+}
+
+function buildCompetitiveRankEntries(rows, config, options = {}) {
+  const sortedRows = sortRankingRows(rows, config);
+  const entries = [];
+  let previousValue = null;
+  let previousRank = 0;
+
+  sortedRows.forEach((row, index) => {
+    const currentValue = normalizeRankingValue(row[config.key]);
+    const rank = index === 0 || currentValue !== previousValue ? index + 1 : previousRank;
+    const qualified = typeof options.qualified === "function" ? options.qualified(row) : options.qualified;
+    const underQualified =
+      typeof options.underQualified === "function" ? options.underQualified(row) : options.underQualified;
+
+    entries.push({
+      type: "player",
+      rank,
+      rankDisplay: String(rank),
+      snapshotRank: rank,
+      name: row.name,
+      value: row[config.displayKey || config.key],
+      status: row.status || "active",
+      qualified,
+      highlightQualified: options.highlightQualified && qualified,
+      underQualified,
+    });
+
+    previousValue = currentValue;
+    previousRank = rank;
+  });
+
+  return entries;
+}
+
+function insertTopTenSeparator(entries) {
+  const rankedEntries = entries.filter((entry) => entry.type === "player" && typeof entry.rank === "number");
+  const lastTopTenIndex = rankedEntries.reduce((lastIndex, entry, index) => {
+    return entry.rank <= 10 ? index : lastIndex;
+  }, -1);
+
+  if (lastTopTenIndex === -1 || lastTopTenIndex === rankedEntries.length - 1) {
+    return entries;
+  }
+
+  const actualIndex = entries.findIndex(
+    (entry, index) =>
+      entry.type === "player" &&
+      entry.name === rankedEntries[lastTopTenIndex].name &&
+      entries.slice(0, index + 1).filter((candidate) => candidate.type === "player").length === lastTopTenIndex + 1
+  );
+
+  if (actualIndex === -1) {
+    return entries;
+  }
+
+  const cloned = [...entries];
+  cloned.splice(actualIndex + 1, 0, createSeparatorEntry("top10", "10위 구분선"));
+  return cloned;
+}
+
+function buildRankingEntries(rows, config, type) {
+  if (type === "hitter" && config.separateQualification) {
+    const qualifiedRows = rows.filter((row) => isQualifiedBatter(row));
+    const underQualifiedRows = rows.filter((row) => !isQualifiedBatter(row));
+
+    const qualifiedEntries = insertTopTenSeparator(
+      buildCompetitiveRankEntries(qualifiedRows, config, { qualified: true })
+    );
+    const underQualifiedEntries = sortRankingRows(underQualifiedRows, config).map((row) => ({
+      type: "player",
+      rank: null,
+      rankDisplay: "—",
+      snapshotRank: null,
+      name: row.name,
+      value: row[config.displayKey || config.key],
+      status: row.status || "active",
+      qualified: false,
+      highlightQualified: false,
+      underQualified: true,
+    }));
+
+    if (!underQualifiedEntries.length) {
+      return qualifiedEntries;
+    }
+
+    return [
+      ...qualifiedEntries,
+      createSeparatorEntry("under-qualified", "규정타석 미달"),
+      ...underQualifiedEntries,
+    ];
+  }
+
+  const rankedEntries = buildCompetitiveRankEntries(rows, config, {
+    qualified: type === "hitter" ? isQualifiedBatter : undefined,
+    highlightQualified: type === "hitter" && config.qualificationHighlight,
+    underQualified: false,
+  }).map((entry) => {
+    if (type === "hitter" && config.qualificationHighlight) {
+      const qualified = isQualifiedBatter(rows.find((row) => row.name === entry.name) || {});
+      return {
+        ...entry,
+        qualified,
+        highlightQualified: qualified,
+        underQualified: !qualified,
+      };
+    }
+    return entry;
+  });
+
+  return insertTopTenSeparator(rankedEntries);
 }
 
 function createRankingTableMarkup(entries, changes) {
   const rowsHtml = entries
     .map((entry) => {
+      if (entry.type === "separator") {
+        return `
+          <tr class="separator-row ${entry.separatorKind}">
+            <td colspan="4">${entry.label}</td>
+          </tr>
+        `;
+      }
+
       const classNames = [];
       if (entry.status === "retired" || entry.status === "injured") {
         classNames.push(entry.status);
+      }
+      if (entry.highlightQualified) {
+        classNames.push("qualified-highlight");
+      }
+      if (entry.underQualified) {
+        classNames.push("under-qualified");
       }
 
       const change = changes[entry.name] || { symbol: "—", text: "변동없음", className: "same" };
@@ -1066,7 +1198,7 @@ function createRankingTableMarkup(entries, changes) {
 
       return `
         <tr${classAttr}>
-          <td>${entry.rank}</td>
+          <td>${entry.rankDisplay ?? entry.rank ?? ""}</td>
           <td>${entry.name}</td>
           <td>${entry.value == null ? "" : entry.value}</td>
           <td><span class="rank-change ${change.className}">${change.text} ${change.symbol}</span></td>
@@ -1173,13 +1305,16 @@ function renderRank(type) {
   const blocksHtml = configs
     .map((config) => {
       const previousSnapshot = loadRankingSnapshot(type, config.key) || {};
-      const entries = buildRankingEntries(rows, config);
+      const entries = buildRankingEntries(rows, config, type);
       const currentSnapshot = {};
       const changes = {};
 
       entries.forEach((entry) => {
-        currentSnapshot[entry.name] = entry.rank;
-        changes[entry.name] = compareRankChange(entry.rank, previousSnapshot[entry.name]);
+        if (entry.type !== "player" || entry.snapshotRank == null) {
+          return;
+        }
+        currentSnapshot[entry.name] = entry.snapshotRank;
+        changes[entry.name] = compareRankChange(entry.snapshotRank, previousSnapshot[entry.name]);
       });
 
       snapshots[config.key] = currentSnapshot;
