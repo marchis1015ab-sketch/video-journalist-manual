@@ -232,8 +232,8 @@ body {
   gap: 20px;
 }
 
-.team-entry-panel,
-.team-readonly-panel,
+.team-import-panel,
+.team-import-preview,
 .team-detail-block,
 .team-record-card,
 .team-notice {
@@ -243,45 +243,48 @@ body {
   box-shadow: 0 12px 28px rgba(16, 24, 40, 0.06);
 }
 
-.team-entry-panel,
-.team-readonly-panel,
+.team-import-panel,
+.team-import-preview,
 .team-notice {
   padding: 18px 20px;
 }
 
-.team-entry-header,
-.team-readonly-panel {
+.team-import-header,
+.team-import-preview-header {
   display: grid;
   gap: 4px;
   margin-bottom: 14px;
 }
 
-.team-entry-header h3,
-.team-readonly-panel h3,
+.team-import-header h3,
+.team-import-preview-header h3,
 .team-detail-block h4 {
   margin: 0;
 }
 
-.team-entry-header p,
-.team-readonly-panel p,
+.team-import-header p,
+.team-import-preview-header p,
 .team-notice {
   color: #475467;
   line-height: 1.5;
 }
 
-.team-form-grid,
+.team-import-form,
+.team-import-preview-tables,
 .team-record-detail-grid {
   display: grid;
   gap: 14px;
 }
 
-.team-form-grid {
+.team-edit-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
   gap: 12px;
+  margin-bottom: 14px;
 }
 
-.team-form-grid label,
+.team-edit-grid label,
+.team-import-form label,
 .team-match-item {
   display: grid;
   gap: 6px;
@@ -289,12 +292,13 @@ body {
   font-weight: 600;
 }
 
-.team-form-wide {
+.team-edit-wide {
   grid-column: 1 / -1;
 }
 
-.team-form-grid input,
-.team-form-grid textarea,
+.team-import-form input,
+.team-import-form textarea,
+.team-edit-grid input,
 .team-match-item select {
   width: 100%;
   border: 1px solid #d0d5dd;
@@ -305,19 +309,18 @@ body {
   background: #ffffff;
 }
 
-.team-form-grid textarea {
+.team-import-form textarea {
   resize: vertical;
-  min-height: 160px;
+  min-height: 180px;
 }
 
-.team-entry-actions {
+.team-import-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-  margin-top: 14px;
 }
 
-.team-entry-actions button,
+.team-import-actions button,
 .team-toggle {
   border: 0;
   border-radius: 999px;
@@ -328,11 +331,11 @@ body {
   font-weight: 700;
 }
 
-.team-entry-actions button {
+.team-import-actions button {
   padding: 10px 16px;
 }
 
-.team-entry-actions button:disabled {
+.team-import-actions button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -341,29 +344,18 @@ body {
   padding: 6px 10px;
 }
 
-.team-form-warnings {
+.team-import-warnings {
   display: grid;
   gap: 8px;
-  margin-top: 14px;
+  margin-bottom: 14px;
   padding: 12px 14px;
   border-radius: 14px;
   background: #fff7ed;
   color: #9a3412;
 }
 
-.team-form-warnings p {
+.team-import-warnings p {
   margin: 0;
-}
-
-.team-match-panel {
-  display: grid;
-  gap: 12px;
-  margin-top: 14px;
-}
-
-.team-match-panel h3 {
-  margin: 0;
-  font-size: 16px;
 }
 
 .team-match-grid {
@@ -413,7 +405,8 @@ body {
   padding: 14px;
 }
 
-.team-detail-block .table-wrap {
+.team-detail-block .table-wrap,
+.team-import-preview .table-wrap {
   margin-top: 10px;
 }
 
@@ -645,7 +638,7 @@ body {
     grid-template-columns: repeat(3, minmax(180px, 1fr));
   }
 
-  .team-form-grid,
+  .team-edit-grid,
   .team-match-grid,
   .team-record-detail-grid {
     grid-template-columns: 1fr;
@@ -690,8 +683,8 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .team-entry-panel,
-  .team-readonly-panel,
+  .team-import-panel,
+  .team-import-preview,
   .team-notice {
     padding: 16px;
   }
