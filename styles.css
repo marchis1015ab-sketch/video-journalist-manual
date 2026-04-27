@@ -94,7 +94,7 @@ body {
 
 .ranking-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(180px, 1fr));
+  grid-template-columns: repeat(6, minmax(160px, 1fr));
   gap: 8px;
   align-items: start;
 }
@@ -243,7 +243,7 @@ body {
   border: 1px solid #d0d5dd;
   border-radius: 18px;
   background: #ffffff;
-  overflow-x: auto;
+  overflow-x: hidden;
   box-shadow: 0 12px 28px rgba(16, 24, 40, 0.06);
 }
 
@@ -262,24 +262,48 @@ body {
 }
 
 .ranking-table {
-  min-width: 420px;
   width: 100%;
+  table-layout: fixed;
   font-size: 11px;
 }
 
 .ranking-table th,
 .ranking-table td {
-  padding: 3px 4px;
+  padding: 2px 3px;
   font-size: 11px;
 }
 
 .ranking-table td:first-child,
 .ranking-table th:first-child {
+  width: 28px;
+  min-width: 28px;
   text-align: center;
 }
 
 .ranking-table td:nth-child(2) {
+  max-width: 70px;
   text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ranking-card th:nth-child(3),
+.ranking-card td:nth-child(3) {
+  width: 50px;
+  min-width: 50px;
+  text-align: right;
+  padding: 2px 4px;
+}
+
+.ranking-card th:nth-child(4),
+.ranking-card td:nth-child(4) {
+  width: 22px;
+  min-width: 22px;
+  max-width: 22px;
+  text-align: center;
+  padding: 0;
+  font-size: 11px;
 }
 
 .rank-change {
