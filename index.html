@@ -45,11 +45,16 @@
     </main>
   </div>
 
-  <script id="player-2022-template" type="text/template">
+  <script id="player-stats-template" type="text/template">
     <div class="page">
       <div class="page-header">
-        <h2>선수기록 2022</h2>
-        <p>2022년 타자 기록</p>
+        <h2 id="player-stats-title">선수기록 2022</h2>
+        <p id="player-stats-subtitle">2022년 타자 기록</p>
+      </div>
+
+      <div class="player-type-tabs">
+        <button class="player-type-tab" data-player-type="hitter" type="button">타자</button>
+        <button class="player-type-tab" data-player-type="pitcher" type="button">투수</button>
       </div>
 
       <div class="table-wrap">
@@ -62,32 +67,36 @@
               <th>게임수</th>
               <th>타석</th>
               <th>타수</th>
+              <th>총안타</th>
               <th>안타</th>
               <th>2루타</th>
               <th>3루타</th>
               <th>홈런</th>
+              <th>루타</th>
               <th>타점</th>
               <th>득점</th>
               <th>도루</th>
-              <th>삼진</th>
-              <th>볼넷</th>
-              <th>사구</th>
+              <th>도루실패</th>
               <th>희생타</th>
               <th>희생플라이</th>
+              <th>볼넷</th>
+              <th>사구</th>
+              <th>사사구</th>
+              <th>삼진</th>
               <th>병살</th>
-              <th>실책</th>
               <th>AVG</th>
-              <th>출루율</th>
-              <th>장타율</th>
+              <th>출루율OBP</th>
+              <th>장타율SLG</th>
               <th>OPS</th>
             </tr>
           </thead>
-          <tbody id="player-2022-body"></tbody>
+          <tbody id="player-stats-body"></tbody>
         </table>
       </div>
     </div>
   </script>
 
+  <script src="formulas.js"></script>
   <script src="data.js"></script>
   <script src="app.js"></script>
 </body>

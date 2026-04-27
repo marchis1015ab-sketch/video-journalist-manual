@@ -2,11 +2,12 @@ const state = {
   menu: "team",
   teamYear: "2022",
   playerYear: "2022",
+  playerType: "hitter",
   rankType: "hitter",
 };
 
 const player2022Overrides = {
-  김성민: {
+  "김성민": {
     name: "김성민",
     number: 40,
     pos: "CF",
@@ -14,25 +15,28 @@ const player2022Overrides = {
     pa: 3,
     ab: 2,
     h: 0,
+    h1: 0,
     d2: 0,
     d3: 0,
     hr: 0,
+    tb: 0,
     rbi: 0,
     r: 1,
     sb: 2,
+    cs: 0,
     so: 1,
     bb: 1,
     hbp: 0,
+    bbhbp: 1,
     sh: 0,
     sf: 0,
     dp: 1,
-    err: 1,
     avg: 0.000,
     obp: 0.333,
     slg: 0.000,
     ops: 0.333,
   },
-  김안수: {
+  "김안수": {
     name: "김안수",
     number: 17,
     pos: "2B",
@@ -40,25 +44,40 @@ const player2022Overrides = {
     pa: 3,
     ab: 2,
     h: 0,
+    h1: 0,
     d2: 0,
     d3: 0,
     hr: 0,
+    tb: 0,
     rbi: 1,
     r: 0,
     sb: 0,
+    cs: 0,
     so: 0,
     bb: 0,
     hbp: 0,
+    bbhbp: 0,
     sh: 0,
     sf: 0,
     dp: 2,
-    err: 1,
     avg: 0.000,
     obp: 0.333,
     slg: 0.000,
     ops: 0.333,
   },
 };
+
+function getHistoricalBatterRows(year) {
+  if (
+    typeof SOURCE_DATA === "undefined" ||
+    !SOURCE_DATA.historicalBattersByYear ||
+    !SOURCE_DATA.historicalBattersByYear[year]
+  ) {
+    return [];
+  }
+
+  return SOURCE_DATA.historicalBattersByYear[year];
+}
 
 function formatRate(value) {
   const numeric = Number(value);
@@ -68,7 +87,7 @@ function formatRate(value) {
   return numeric.toFixed(3);
 }
 
-function toPlayer2022Row(row) {
+function toPlayerStatsRow(row) {
   const ab = Number(row.AB || 0);
   const h = Number(row.H || 0);
   const bb = Number(row.BB || 0);
@@ -82,24 +101,27 @@ function toPlayer2022Row(row) {
   return {
     name: row.player,
     number: row.number === "" ? "" : Number(row.number),
-    pos: row.position || "",
+    pos: row.position || row.hand || "",
     g: Number(row.G || 0),
     pa: Number(row.PA || 0),
     ab,
     h,
+    h1: Number(row.H1 || 0),
     d2: Number(row.D2 || 0),
     d3: Number(row.D3 || 0),
     hr: Number(row.HR || 0),
+    tb,
     rbi: Number(row.RBI || 0),
     r: Number(row.R || 0),
     sb: Number(row.SB || 0),
-    so: Number(row.SO || 0),
-    bb,
-    hbp,
+    cs: Number(row.CS || 0),
     sh: Number(row.SH || 0),
     sf,
+    bb,
+    hbp,
+    bbhbp: Number(row.BBHBP || 0),
+    so: Number(row.SO || 0),
     dp: Number(row.GIDP || 0),
-    err: row.ERR ?? row.E ?? "",
     avg: ab ? h / ab : 0,
     obp,
     slg,
@@ -107,19 +129,19 @@ function toPlayer2022Row(row) {
   };
 }
 
-function getPlayer2022Data() {
-  const sourceRows =
-    typeof SOURCE_DATA !== "undefined" &&
-    SOURCE_DATA.historicalBattersByYear &&
-    SOURCE_DATA.historicalBattersByYear["2022"]
-      ? SOURCE_DATA.historicalBattersByYear["2022"]
-      : [];
-  return sourceRows.map((row) => {
-    const base = toPlayer2022Row(row);
-    const override = player2022Overrides[base.name];
+function buildPlayerYearData(year) {
+  const rows = getHistoricalBatterRows(year);
+  return rows.map((row) => {
+    const base = toPlayerStatsRow(row);
+    const override = year === "2022" ? player2022Overrides[base.name] : null;
     return override ? override : base;
   });
 }
+
+const player2022 = buildPlayerYearData("2022");
+const player2023 = buildPlayerYearData("2023");
+const player2024 = buildPlayerYearData("2024");
+const player2025 = buildPlayerYearData("2025");
 
 function setActiveMenu() {
   document.querySelectorAll(".menu-item").forEach((item) => {
@@ -149,15 +171,32 @@ function renderPlaceholder(title, message) {
   `;
 }
 
-function renderPlayer2022() {
+function bindPlayerTypeTabs() {
+  document.querySelectorAll(".player-type-tab").forEach((button) => {
+    button.classList.toggle("active", button.dataset.playerType === state.playerType);
+    button.addEventListener("click", () => {
+      state.playerType = button.dataset.playerType;
+      renderPlayerYear(state.playerYear);
+      setActiveMenu();
+    });
+  });
+}
+
+function renderPlayerShell(year, subtitle) {
   const container = document.getElementById("page-container");
-  const template = document.getElementById("player-2022-template").innerHTML;
+  const template = document.getElementById("player-stats-template").innerHTML;
   container.innerHTML = template;
 
-  const tbody = document.getElementById("player-2022-body");
-  const player2022 = getPlayer2022Data();
+  document.getElementById("player-stats-title").textContent = `선수기록 ${year}`;
+  document.getElementById("player-stats-subtitle").textContent = subtitle;
 
-  player2022.forEach((p) => {
+  bindPlayerTypeTabs();
+}
+
+function renderPlayerTable(year, data) {
+  renderPlayerShell(year, `${year}년 타자 기록`);
+  const tbody = document.getElementById("player-stats-body");
+  data.forEach((p) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${p.name}</td>
@@ -167,19 +206,22 @@ function renderPlayer2022() {
       <td>${p.pa}</td>
       <td>${p.ab}</td>
       <td>${p.h}</td>
+      <td>${p.h1}</td>
       <td>${p.d2}</td>
       <td>${p.d3}</td>
       <td>${p.hr}</td>
+      <td>${p.tb}</td>
       <td>${p.rbi}</td>
       <td>${p.r}</td>
       <td>${p.sb}</td>
-      <td>${p.so}</td>
-      <td>${p.bb}</td>
-      <td>${p.hbp}</td>
+      <td>${p.cs}</td>
       <td>${p.sh}</td>
       <td>${p.sf}</td>
+      <td>${p.bb}</td>
+      <td>${p.hbp}</td>
+      <td>${p.bbhbp}</td>
+      <td>${p.so}</td>
       <td>${p.dp}</td>
-      <td>${p.err}</td>
       <td>${formatRate(p.avg)}</td>
       <td>${formatRate(p.obp)}</td>
       <td>${formatRate(p.slg)}</td>
@@ -189,16 +231,45 @@ function renderPlayer2022() {
   });
 }
 
+function renderPlayerStats(year) {
+  const dataMap = {
+    "2022": player2022,
+    "2023": player2023,
+    "2024": player2024,
+    "2025": player2025,
+  };
+
+  if (state.playerType === "pitcher") {
+    renderPlayerShell(year, `${year}년 투수 기록`);
+    const tableWrap = document.querySelector(".table-wrap");
+    tableWrap.innerHTML = `
+      <div class="placeholder-panel">
+        <p>투수 기록은 아직 입력되지 않았습니다.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const data = dataMap[year] || [];
+  if (!data.length) {
+    renderPlayerShell(year, `${year}년 타자 기록`);
+    const tableWrap = document.querySelector(".table-wrap");
+    tableWrap.innerHTML = `
+      <div class="placeholder-panel">
+        <p>${year}년 타자 기록은 아직 입력되지 않았습니다.</p>
+      </div>
+    `;
+    return;
+  }
+  renderPlayerTable(year, data);
+}
+
 function renderTeamYear(year) {
   renderPlaceholder(`팀기록 ${year}`, `${year}년 팀기록 영역입니다.`);
 }
 
 function renderPlayerYear(year) {
-  if (year === "2022") {
-    renderPlayer2022();
-    return;
-  }
-  renderPlaceholder(`선수기록 ${year}`, `${year}년 선수기록 영역입니다.`);
+  renderPlayerStats(year);
 }
 
 function renderTotal() {
@@ -241,7 +312,7 @@ function initMenuClicks() {
 }
 
 function initYearClicks() {
-  document.querySelectorAll('[data-year="2022"], [data-year="2023"], [data-year="2024"], [data-year="2025"], [data-year="2026"]').forEach((el) => {
+  document.querySelectorAll("[data-year]").forEach((el) => {
     el.addEventListener("click", () => {
       const parent = el.closest(".submenu").dataset.submenu;
 
@@ -253,6 +324,7 @@ function initYearClicks() {
       if (parent === "player") {
         state.menu = "player";
         state.playerYear = el.dataset.year;
+        state.playerType = "hitter";
       }
 
       renderCurrentPage();
@@ -261,7 +333,7 @@ function initYearClicks() {
 }
 
 function initRankClicks() {
-  document.querySelectorAll('[data-type="hitter"], [data-type="pitcher"]').forEach((el) => {
+  document.querySelectorAll("[data-type]").forEach((el) => {
     el.addEventListener("click", () => {
       state.menu = "rank";
       state.rankType = el.dataset.type;
