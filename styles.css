@@ -182,6 +182,11 @@ body {
   background: #f8fafc;
 }
 
+.stats-table tbody tr.is-total {
+  background: #fff7ed;
+  font-weight: 700;
+}
+
 .stats-table th:first-child,
 .stats-table td:first-child {
   position: sticky;
