@@ -6,6 +6,8 @@ const state = {
   rankType: "hitter",
 };
 
+const CAREER_YEARS = ["2022", "2023", "2024", "2025"];
+
 const hitterColumns = [
   { label: "이름", key: "name" },
   { label: "등번호", key: "number" },
@@ -31,8 +33,8 @@ const hitterColumns = [
   { label: "삼진", key: "so" },
   { label: "병살", key: "dp" },
   { label: "AVG", key: "avg" },
-  { label: "출루율OBP", key: "obp" },
-  { label: "장타율SLG", key: "slg" },
+  { label: "출루율", key: "obp" },
+  { label: "장타율", key: "slg" },
   { label: "OPS", key: "ops" },
 ];
 
@@ -69,6 +71,57 @@ const pitcherColumns = [
   { label: "피안타율", key: "baa" },
 ];
 
+const careerHitterColumns = [
+  { label: "이름", key: "name" },
+  { label: "경기수", key: "g" },
+  { label: "타석", key: "pa" },
+  { label: "타수", key: "ab" },
+  { label: "안타", key: "h" },
+  { label: "2루타", key: "d2" },
+  { label: "3루타", key: "d3" },
+  { label: "홈런", key: "hr" },
+  { label: "루타", key: "tb" },
+  { label: "타점", key: "rbi" },
+  { label: "득점", key: "r" },
+  { label: "도루", key: "sb" },
+  { label: "도루실패", key: "cs" },
+  { label: "볼넷", key: "bb" },
+  { label: "사구", key: "hbp" },
+  { label: "사사구", key: "bbhbp" },
+  { label: "삼진", key: "so" },
+  { label: "병살", key: "dp" },
+  { label: "AVG", key: "avg" },
+  { label: "출루율", key: "obp" },
+  { label: "장타율", key: "slg" },
+  { label: "OPS", key: "ops" },
+  { label: "RC", key: "rc" },
+  { label: "RC/18", key: "rc18" },
+  { label: "XR", key: "xr" },
+];
+
+const careerPitcherColumns = [
+  { label: "이름", key: "name" },
+  { label: "경기", key: "g" },
+  { label: "선발", key: "gs" },
+  { label: "구원", key: "gr" },
+  { label: "승", key: "w" },
+  { label: "패", key: "l" },
+  { label: "세이브", key: "sv" },
+  { label: "홀드", key: "hld" },
+  { label: "이닝", key: "ipDisplay" },
+  { label: "타자", key: "bf" },
+  { label: "타수", key: "ab" },
+  { label: "피안타", key: "h" },
+  { label: "피홈런", key: "hr" },
+  { label: "볼넷", key: "bb" },
+  { label: "사구", key: "hbp" },
+  { label: "삼진", key: "so" },
+  { label: "실점", key: "r" },
+  { label: "자책", key: "er" },
+  { label: "ERA", key: "era" },
+  { label: "WHIP", key: "whip" },
+];
+
 const player2022Overrides = {
   "김성민": {
     name: "김성민",
@@ -94,10 +147,10 @@ const player2022Overrides = {
     sh: 0,
     sf: 0,
     dp: 1,
-    avg: 0.000,
-    obp: 0.333,
-    slg: 0.000,
-    ops: 0.333,
+    avg: "0.000",
+    obp: "0.333",
+    slg: "0.000",
+    ops: "0.333",
   },
   "김안수": {
     name: "김안수",
@@ -123,10 +176,10 @@ const player2022Overrides = {
     sh: 0,
     sf: 0,
     dp: 2,
-    avg: 0.000,
-    obp: 0.333,
-    slg: 0.000,
-    ops: 0.333,
+    avg: "0.000",
+    obp: "0.333",
+    slg: "0.000",
+    ops: "0.333",
   },
 };
 
@@ -158,6 +211,53 @@ const pitcherYearExtras = {
   },
 };
 
+function safeNumberLocal(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function formatDecimal(value, digits = 3) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return "0".padEnd(digits + 2, "0");
+  }
+  return numeric.toFixed(digits);
+}
+
+function formatEraOrWhip(value, digits = 2) {
+  if (value === "#DIV/0!") {
+    return value;
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return "#DIV/0!";
+  }
+  return numeric.toFixed(digits);
+}
+
+function formatWinPct(wins, losses) {
+  const total = safeNumberLocal(wins) + safeNumberLocal(losses);
+  if (!total) {
+    return "0.000";
+  }
+  return (safeNumberLocal(wins) / total).toFixed(3);
+}
+
+function formatFractionalInnings(value) {
+  const numeric = safeNumberLocal(value);
+  const outs = Math.round(numeric * 3);
+  const whole = Math.floor(outs / 3);
+  const remainder = outs % 3;
+
+  if (remainder === 0) {
+    return String(whole);
+  }
+  if (whole === 0) {
+    return remainder === 1 ? "1/3" : "2/3";
+  }
+  return remainder === 1 ? `${whole} 1/3` : `${whole} 2/3`;
+}
+
 function getHistoricalBatterRows(year) {
   if (
     typeof SOURCE_DATA === "undefined" ||
@@ -182,169 +282,138 @@ function getHistoricalPitcherRows(year) {
   return SOURCE_DATA.historicalPitchersByYear[year];
 }
 
-function safeNumber(value) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : 0;
+function getPlayerStatus(name) {
+  if (typeof PLAYER_STATUS_MAP === "undefined") {
+    return "active";
+  }
+  return PLAYER_STATUS_MAP[name] || "active";
 }
 
-function formatRate(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return "0.000";
+function getCareerPlayerOrder(type) {
+  if (typeof SOURCE_DATA === "undefined") {
+    return [];
   }
-  return numeric.toFixed(3);
+
+  const source =
+    type === "pitcher"
+      ? SOURCE_DATA.historicalCareerPitchers
+      : SOURCE_DATA.historicalCareerBatters;
+
+  return source ? Object.keys(source) : [];
 }
 
-function formatMetric(value, digits) {
-  if (value === "#DIV/0!") {
-    return value;
-  }
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return "";
-  }
-  return numeric.toFixed(digits);
-}
-
-function formatWinPct(wins, losses) {
-  const total = safeNumber(wins) + safeNumber(losses);
-  if (!total) {
-    return "0.000";
-  }
-  return (safeNumber(wins) / total).toFixed(3);
-}
-
-function formatFractionalInnings(value) {
-  if (typeof value === "string") {
-    return value;
-  }
-
-  const outs = Math.round(safeNumber(value) * 3);
-  const whole = Math.floor(outs / 3);
-  const remainder = outs % 3;
-
-  if (remainder === 0) {
-    return String(whole);
-  }
-  if (whole === 0) {
-    return remainder === 1 ? "1/3" : "2/3";
-  }
-  return remainder === 1 ? `${whole} 1/3` : `${whole} 2/3`;
-}
-
-function calcPitcherEra(er, ip) {
-  const innings = safeNumber(ip);
-  if (!innings) {
-    return "#DIV/0!";
-  }
-  return ((safeNumber(er) * 9) / innings).toFixed(2);
-}
-
-function calcPitcherRate(numerator, ip) {
-  const innings = safeNumber(ip);
-  if (!innings) {
-    return "#DIV/0!";
-  }
-  return ((safeNumber(numerator) * 7) / innings).toFixed(3);
-}
-
-function calcPitcherWhip(hits, walks, ip) {
-  const innings = safeNumber(ip);
-  if (!innings) {
-    return "#DIV/0!";
-  }
-  return ((safeNumber(hits) + safeNumber(walks)) / innings).toFixed(3);
-}
-
-function calcPitcherBaa(hits, atBats) {
-  const denominator = safeNumber(atBats);
-  if (!denominator) {
-    return "#DIV/0!";
-  }
-  return (safeNumber(hits) / denominator).toFixed(3);
+function mergeCareerPlayerOrder(type, accumulator) {
+  const baseOrder = getCareerPlayerOrder(type);
+  const ordered = baseOrder.filter((name) => accumulator.has(name));
+  const extras = Array.from(accumulator.keys()).filter((name) => !baseOrder.includes(name));
+  return [...ordered, ...extras];
 }
 
 function toHitterRow(row) {
-  const ab = safeNumber(row.AB);
-  const h = safeNumber(row.H);
-  const bb = safeNumber(row.BB);
-  const hbp = safeNumber(row.HBP);
-  const sf = safeNumber(row.SF);
-  const tb = safeNumber(row.TB);
-  const obpDenominator = ab + bb + hbp + sf;
-  const obp = obpDenominator ? (h + bb + hbp) / obpDenominator : 0;
-  const slg = ab ? tb / ab : 0;
+  const stats = {
+    AB: safeNumberLocal(row.AB),
+    H: safeNumberLocal(row.H),
+    H1: safeNumberLocal(row.H1),
+    D2: safeNumberLocal(row.D2),
+    D3: safeNumberLocal(row.D3),
+    HR: safeNumberLocal(row.HR),
+    TB: safeNumberLocal(row.TB),
+    BB: safeNumberLocal(row.BB),
+    HBP: safeNumberLocal(row.HBP),
+    BBHBP: safeNumberLocal(row.BBHBP),
+    SH: safeNumberLocal(row.SH),
+    SF: safeNumberLocal(row.SF),
+    SB: safeNumberLocal(row.SB),
+    CS: safeNumberLocal(row.CS),
+    SO: safeNumberLocal(row.SO),
+    GIDP: safeNumberLocal(row.GIDP),
+  };
+  const calculated = calcBatting(stats);
 
   return {
     name: row.player,
     number: row.number === "" ? "" : Number(row.number),
     pos: row.position || row.hand || "",
-    g: safeNumber(row.G),
-    pa: safeNumber(row.PA),
-    ab,
-    h,
-    h1: safeNumber(row.H1),
-    d2: safeNumber(row.D2),
-    d3: safeNumber(row.D3),
-    hr: safeNumber(row.HR),
-    tb,
-    rbi: safeNumber(row.RBI),
-    r: safeNumber(row.R),
-    sb: safeNumber(row.SB),
-    cs: safeNumber(row.CS),
-    sh: safeNumber(row.SH),
-    sf,
-    bb,
-    hbp,
-    bbhbp: safeNumber(row.BBHBP),
-    so: safeNumber(row.SO),
-    dp: safeNumber(row.GIDP),
-    avg: formatRate(ab ? h / ab : 0),
-    obp: formatRate(obp),
-    slg: formatRate(slg),
-    ops: formatRate(obp + slg),
+    g: safeNumberLocal(row.G),
+    pa: safeNumberLocal(row.PA),
+    ab: stats.AB,
+    h: stats.H,
+    h1: calculated.H1,
+    d2: stats.D2,
+    d3: stats.D3,
+    hr: stats.HR,
+    tb: calculated.TB,
+    rbi: safeNumberLocal(row.RBI),
+    r: safeNumberLocal(row.R),
+    sb: stats.SB,
+    cs: stats.CS,
+    sh: stats.SH,
+    sf: stats.SF,
+    bb: stats.BB,
+    hbp: stats.HBP,
+    bbhbp: calculated.BBHBP,
+    so: stats.SO,
+    dp: stats.GIDP,
+    avg: formatDecimal(calculated.AVG),
+    obp: formatDecimal(calculated.OBP),
+    slg: formatDecimal(calculated.SLG),
+    ops: formatDecimal(calculated.OPS),
+    status: getPlayerStatus(row.player),
   };
 }
 
-function toPitcherRow(year, row) {
+function toPitcherSeasonRow(year, row) {
   const extras = pitcherYearExtras[year]?.[row.player] || { wp: 0, bk: 0 };
-  const ip = safeNumber(row.IP);
-  const hits = safeNumber(row.H);
-  const walks = safeNumber(row.BB);
-  const atBats = safeNumber(row.AB);
+  const pitching = calcPitching({
+    IP: safeNumberLocal(row.IP),
+    ER: safeNumberLocal(row.ER),
+    H: safeNumberLocal(row.H),
+    BB: safeNumberLocal(row.BB),
+  });
+
+  const innings = safeNumberLocal(row.IP);
+  const hits = safeNumberLocal(row.H);
+  const walks = safeNumberLocal(row.BB);
+  const strikeouts = safeNumberLocal(row.SO);
+  const atBats = safeNumberLocal(row.AB);
+
+  const bb7 = innings ? ((walks * 7) / innings).toFixed(3) : "#DIV/0!";
+  const k7 = innings ? ((strikeouts * 7) / innings).toFixed(3) : "#DIV/0!";
+  const baa = atBats ? (hits / atBats).toFixed(3) : "#DIV/0!";
 
   return {
     name: row.player,
     number: row.number || "",
-    g: safeNumber(row.G),
-    gs: safeNumber(row.GS),
-    gr: safeNumber(row.GR),
-    w: safeNumber(row.W),
-    l: safeNumber(row.L),
-    sv: safeNumber(row.SV),
-    hld: safeNumber(row.HLD),
-    ip,
-    ipDisplay: formatFractionalInnings(ip),
-    bf: safeNumber(row.BF),
+    g: safeNumberLocal(row.G),
+    gs: safeNumberLocal(row.GS),
+    gr: safeNumberLocal(row.GR),
+    w: safeNumberLocal(row.W),
+    l: safeNumberLocal(row.L),
+    sv: safeNumberLocal(row.SV),
+    hld: safeNumberLocal(row.HLD),
+    ip: innings,
+    ipDisplay: formatFractionalInnings(innings),
+    bf: safeNumberLocal(row.BF),
     ab: atBats,
     h: hits,
-    hr: safeNumber(row.HR),
-    sh: safeNumber(row.SH),
-    sf: safeNumber(row.SF),
+    hr: safeNumberLocal(row.HR),
+    sh: safeNumberLocal(row.SH),
+    sf: safeNumberLocal(row.SF),
     bb: walks,
-    hbp: safeNumber(row.HBP),
-    bbhbp: safeNumber(row.BBHBP),
-    so: safeNumber(row.SO),
-    wp: safeNumber(extras.wp),
-    bk: safeNumber(extras.bk),
-    r: safeNumber(row.R),
-    er: safeNumber(row.ER),
+    hbp: safeNumberLocal(row.HBP),
+    bbhbp: safeNumberLocal(row.BBHBP),
+    so: strikeouts,
+    wp: safeNumberLocal(extras.wp),
+    bk: safeNumberLocal(extras.bk),
+    r: safeNumberLocal(row.R),
+    er: safeNumberLocal(row.ER),
     winPct: formatWinPct(row.W, row.L),
-    era: calcPitcherEra(row.ER, ip),
-    bb7: calcPitcherRate(row.BB, ip),
-    k7: calcPitcherRate(row.SO, ip),
-    whip: calcPitcherWhip(hits, walks, ip),
-    baa: calcPitcherBaa(hits, atBats),
+    era: innings ? formatEraOrWhip(pitching.ERA, 2) : "#DIV/0!",
+    bb7,
+    k7,
+    whip: innings ? formatEraOrWhip(pitching.WHIP, 2) : "#DIV/0!",
+    baa,
+    status: getPlayerStatus(row.player),
   };
 }
 
@@ -352,38 +421,68 @@ function buildHitterYearData(year) {
   return getHistoricalBatterRows(year).map((row) => {
     const base = toHitterRow(row);
     const override = year === "2022" ? player2022Overrides[base.name] : null;
-    return override ? { ...base, ...override, avg: formatRate(override.avg), obp: formatRate(override.obp), slg: formatRate(override.slg), ops: formatRate(override.ops) } : base;
+    return override ? { ...base, ...override, status: getPlayerStatus(base.name) } : base;
   });
 }
 
 function buildPitcherTotalRow(rows) {
-  const totals = rows.reduce((acc, row) => {
-    acc.g += safeNumber(row.g);
-    acc.gs += safeNumber(row.gs);
-    acc.gr += safeNumber(row.gr);
-    acc.w += safeNumber(row.w);
-    acc.l += safeNumber(row.l);
-    acc.sv += safeNumber(row.sv);
-    acc.hld += safeNumber(row.hld);
-    acc.ip += safeNumber(row.ip);
-    acc.bf += safeNumber(row.bf);
-    acc.ab += safeNumber(row.ab);
-    acc.h += safeNumber(row.h);
-    acc.hr += safeNumber(row.hr);
-    acc.sh += safeNumber(row.sh);
-    acc.sf += safeNumber(row.sf);
-    acc.bb += safeNumber(row.bb);
-    acc.hbp += safeNumber(row.hbp);
-    acc.bbhbp += safeNumber(row.bbhbp);
-    acc.so += safeNumber(row.so);
-    acc.wp += safeNumber(row.wp);
-    acc.bk += safeNumber(row.bk);
-    acc.r += safeNumber(row.r);
-    acc.er += safeNumber(row.er);
-    return acc;
-  }, {
-    g: 0, gs: 0, gr: 0, w: 0, l: 0, sv: 0, hld: 0, ip: 0, bf: 0, ab: 0, h: 0,
-    hr: 0, sh: 0, sf: 0, bb: 0, hbp: 0, bbhbp: 0, so: 0, wp: 0, bk: 0, r: 0, er: 0,
+  const totals = rows.reduce(
+    (acc, row) => {
+      acc.g += safeNumberLocal(row.g);
+      acc.gs += safeNumberLocal(row.gs);
+      acc.gr += safeNumberLocal(row.gr);
+      acc.w += safeNumberLocal(row.w);
+      acc.l += safeNumberLocal(row.l);
+      acc.sv += safeNumberLocal(row.sv);
+      acc.hld += safeNumberLocal(row.hld);
+      acc.ip += safeNumberLocal(row.ip);
+      acc.bf += safeNumberLocal(row.bf);
+      acc.ab += safeNumberLocal(row.ab);
+      acc.h += safeNumberLocal(row.h);
+      acc.hr += safeNumberLocal(row.hr);
+      acc.sh += safeNumberLocal(row.sh);
+      acc.sf += safeNumberLocal(row.sf);
+      acc.bb += safeNumberLocal(row.bb);
+      acc.hbp += safeNumberLocal(row.hbp);
+      acc.bbhbp += safeNumberLocal(row.bbhbp);
+      acc.so += safeNumberLocal(row.so);
+      acc.wp += safeNumberLocal(row.wp);
+      acc.bk += safeNumberLocal(row.bk);
+      acc.r += safeNumberLocal(row.r);
+      acc.er += safeNumberLocal(row.er);
+      return acc;
+    },
+    {
+      g: 0,
+      gs: 0,
+      gr: 0,
+      w: 0,
+      l: 0,
+      sv: 0,
+      hld: 0,
+      ip: 0,
+      bf: 0,
+      ab: 0,
+      h: 0,
+      hr: 0,
+      sh: 0,
+      sf: 0,
+      bb: 0,
+      hbp: 0,
+      bbhbp: 0,
+      so: 0,
+      wp: 0,
+      bk: 0,
+      r: 0,
+      er: 0,
+    }
+  );
+
+  const pitching = calcPitching({
+    IP: totals.ip,
+    ER: totals.er,
+    H: totals.h,
+    BB: totals.bb,
   });
 
   return {
@@ -393,20 +492,190 @@ function buildPitcherTotalRow(rows) {
     ...totals,
     ipDisplay: formatFractionalInnings(totals.ip),
     winPct: formatWinPct(totals.w, totals.l),
-    era: calcPitcherEra(totals.er, totals.ip),
-    bb7: calcPitcherRate(totals.bb, totals.ip),
-    k7: calcPitcherRate(totals.so, totals.ip),
-    whip: calcPitcherWhip(totals.h, totals.bb, totals.ip),
-    baa: calcPitcherBaa(totals.h, totals.ab),
+    era: formatEraOrWhip(pitching.ERA, 2),
+    bb7: totals.ip ? ((totals.bb * 7) / totals.ip).toFixed(3) : "#DIV/0!",
+    k7: totals.ip ? ((totals.so * 7) / totals.ip).toFixed(3) : "#DIV/0!",
+    whip: formatEraOrWhip(pitching.WHIP, 2),
+    baa: totals.ab ? (totals.h / totals.ab).toFixed(3) : "#DIV/0!",
   };
 }
 
 function buildPitcherYearData(year) {
-  const rows = getHistoricalPitcherRows(year).map((row) => toPitcherRow(year, row));
-  if (!rows.length) {
-    return rows;
-  }
-  return [...rows, buildPitcherTotalRow(rows)];
+  const rows = getHistoricalPitcherRows(year).map((row) => toPitcherSeasonRow(year, row));
+  return rows.length ? [...rows, buildPitcherTotalRow(rows)] : rows;
+}
+
+function buildCareerHitterData() {
+  const accumulator = new Map();
+
+  CAREER_YEARS.forEach((year) => {
+    getHistoricalBatterRows(year).forEach((row) => {
+      const current = accumulator.get(row.player) || {
+        name: row.player,
+        G: 0,
+        PA: 0,
+        AB: 0,
+        H: 0,
+        H1: 0,
+        D2: 0,
+        D3: 0,
+        HR: 0,
+        TB: 0,
+        RBI: 0,
+        R: 0,
+        SB: 0,
+        CS: 0,
+        BB: 0,
+        HBP: 0,
+        BBHBP: 0,
+        SO: 0,
+        GIDP: 0,
+        SH: 0,
+        SF: 0,
+      };
+
+      current.G += safeNumberLocal(row.G);
+      current.PA += safeNumberLocal(row.PA);
+      current.AB += safeNumberLocal(row.AB);
+      current.H += safeNumberLocal(row.H);
+      current.H1 += safeNumberLocal(row.H1);
+      current.D2 += safeNumberLocal(row.D2);
+      current.D3 += safeNumberLocal(row.D3);
+      current.HR += safeNumberLocal(row.HR);
+      current.TB += safeNumberLocal(row.TB);
+      current.RBI += safeNumberLocal(row.RBI);
+      current.R += safeNumberLocal(row.R);
+      current.SB += safeNumberLocal(row.SB);
+      current.CS += safeNumberLocal(row.CS);
+      current.BB += safeNumberLocal(row.BB);
+      current.HBP += safeNumberLocal(row.HBP);
+      current.BBHBP += safeNumberLocal(row.BBHBP);
+      current.SO += safeNumberLocal(row.SO);
+      current.GIDP += safeNumberLocal(row.GIDP);
+      current.SH += safeNumberLocal(row.SH);
+      current.SF += safeNumberLocal(row.SF);
+
+      accumulator.set(row.player, current);
+    });
+  });
+
+  const order = mergeCareerPlayerOrder("hitter", accumulator);
+  return order
+    .filter((name) => accumulator.has(name))
+    .map((name) => {
+      const stats = accumulator.get(name);
+      const calculated = calcBatting(stats);
+      return {
+        name,
+        g: stats.G,
+        pa: stats.PA,
+        ab: stats.AB,
+        h: stats.H,
+        d2: stats.D2,
+        d3: stats.D3,
+        hr: stats.HR,
+        tb: calculated.TB,
+        rbi: stats.RBI,
+        r: stats.R,
+        sb: stats.SB,
+        cs: stats.CS,
+        bb: stats.BB,
+        hbp: stats.HBP,
+        bbhbp: calculated.BBHBP,
+        so: stats.SO,
+        dp: stats.GIDP,
+        avg: formatDecimal(calculated.AVG),
+        obp: formatDecimal(calculated.OBP),
+        slg: formatDecimal(calculated.SLG),
+        ops: formatDecimal(calculated.OPS),
+        rc: formatDecimal(calculated.RC),
+        rc18: formatDecimal(calculated.RC18),
+        xr: formatDecimal(calculated.XR),
+        status: getPlayerStatus(name),
+      };
+    })
+    .filter((row) => row.g > 0);
+}
+
+function buildCareerPitcherData() {
+  const accumulator = new Map();
+
+  CAREER_YEARS.forEach((year) => {
+    getHistoricalPitcherRows(year).forEach((row) => {
+      const current = accumulator.get(row.player) || {
+        name: row.player,
+        G: 0,
+        GS: 0,
+        GR: 0,
+        W: 0,
+        L: 0,
+        SV: 0,
+        HLD: 0,
+        IP: 0,
+        BF: 0,
+        AB: 0,
+        H: 0,
+        HR: 0,
+        BB: 0,
+        HBP: 0,
+        SO: 0,
+        R: 0,
+        ER: 0,
+      };
+
+      current.G += safeNumberLocal(row.G);
+      current.GS += safeNumberLocal(row.GS);
+      current.GR += safeNumberLocal(row.GR);
+      current.W += safeNumberLocal(row.W);
+      current.L += safeNumberLocal(row.L);
+      current.SV += safeNumberLocal(row.SV);
+      current.HLD += safeNumberLocal(row.HLD);
+      current.IP += safeNumberLocal(row.IP);
+      current.BF += safeNumberLocal(row.BF);
+      current.AB += safeNumberLocal(row.AB);
+      current.H += safeNumberLocal(row.H);
+      current.HR += safeNumberLocal(row.HR);
+      current.BB += safeNumberLocal(row.BB);
+      current.HBP += safeNumberLocal(row.HBP);
+      current.SO += safeNumberLocal(row.SO);
+      current.R += safeNumberLocal(row.R);
+      current.ER += safeNumberLocal(row.ER);
+
+      accumulator.set(row.player, current);
+    });
+  });
+
+  const order = mergeCareerPlayerOrder("pitcher", accumulator);
+  return order
+    .filter((name) => accumulator.has(name))
+    .map((name) => {
+      const stats = accumulator.get(name);
+      const calculated = calcPitching(stats);
+      return {
+        name,
+        g: stats.G,
+        gs: stats.GS,
+        gr: stats.GR,
+        w: stats.W,
+        l: stats.L,
+        sv: stats.SV,
+        hld: stats.HLD,
+        ipDisplay: formatFractionalInnings(stats.IP),
+        bf: stats.BF,
+        ab: stats.AB,
+        h: stats.H,
+        hr: stats.HR,
+        bb: stats.BB,
+        hbp: stats.HBP,
+        so: stats.SO,
+        r: stats.R,
+        er: stats.ER,
+        era: stats.IP ? formatEraOrWhip(calculated.ERA, 2) : "#DIV/0!",
+        whip: stats.IP ? formatEraOrWhip(calculated.WHIP, 2) : "#DIV/0!",
+        status: getPlayerStatus(name),
+      };
+    })
+    .filter((row) => row.g > 0);
 }
 
 const player2022 = buildHitterYearData("2022");
@@ -418,6 +687,9 @@ const pitcher2022 = buildPitcherYearData("2022");
 const pitcher2023 = buildPitcherYearData("2023");
 const pitcher2024 = buildPitcherYearData("2024");
 const pitcher2025 = buildPitcherYearData("2025");
+
+const careerHitters2022To2025 = buildCareerHitterData();
+const careerPitchers2022To2025 = buildCareerPitcherData();
 
 const hitterDataByYear = {
   "2022": player2022,
@@ -483,8 +755,48 @@ function renderPlayerShell(year, subtitle) {
   bindPlayerTypeTabs();
 }
 
-function renderStatsTable({ title, subtitle, columns, rows }) {
-  renderPlayerShell(title, subtitle);
+function createTableMarkup(columns, rows) {
+  const headerHtml = columns.map((column) => `<th>${column.label}</th>`).join("");
+  const rowsHtml = rows
+    .map((row) => {
+      const classNames = [];
+      if (row.isTotal) {
+        classNames.push("is-total");
+      }
+      if (row.status === "retired" || row.status === "injured") {
+        classNames.push(row.status);
+      }
+
+      const cells = columns
+        .map((column, index) => {
+          let value = row[column.key];
+          if (row.isTotal && index === 0 && (value === "" || value == null)) {
+            value = "합계";
+          }
+          if (value == null) {
+            value = "";
+          }
+          return `<td>${value}</td>`;
+        })
+        .join("");
+
+      const classAttr = classNames.length ? ` class="${classNames.join(" ")}"` : "";
+      return `<tr${classAttr}>${cells}</tr>`;
+    })
+    .join("");
+
+  return `
+    <table class="stats-table">
+      <thead>
+        <tr>${headerHtml}</tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
+}
+
+function renderStatsTable({ year, subtitle, columns, rows }) {
+  renderPlayerShell(year, subtitle);
   const tableWrap = document.querySelector(".table-wrap");
 
   if (!rows.length) {
@@ -496,36 +808,46 @@ function renderStatsTable({ title, subtitle, columns, rows }) {
     return;
   }
 
-  const headerHtml = columns.map((column) => `<th>${column.label}</th>`).join("");
-  const rowsHtml = rows.map((row) => {
-    const rowClass = row.isTotal ? " class=\"is-total\"" : "";
-    const cells = columns.map((column, index) => {
-      let value = row[column.key];
-      if (row.isTotal && index === 0 && (value === "" || value == null)) {
-        value = "합계";
-      }
-      if (value == null) {
-        value = "";
-      }
-      return `<td>${value}</td>`;
-    }).join("");
-    return `<tr${rowClass}>${cells}</tr>`;
-  }).join("");
+  tableWrap.innerHTML = createTableMarkup(columns, rows);
+}
 
-  tableWrap.innerHTML = `
-    <table class="stats-table">
-      <thead>
-        <tr>${headerHtml}</tr>
-      </thead>
-      <tbody>${rowsHtml}</tbody>
-    </table>
+function renderCareerPage() {
+  const container = document.getElementById("page-container");
+  container.innerHTML = `
+    <section class="page career-page">
+      <div class="page-header">
+        <h2>통산기록</h2>
+        <p>2022년~2025년 기준으로 2026 시즌을 제외해 다시 계산한 통산표입니다.</p>
+      </div>
+      <section class="career-section">
+        <div class="career-header">
+          <h3>타자 통산</h3>
+        </div>
+        <div class="table-wrap" id="career-hitter-wrap"></div>
+      </section>
+      <section class="career-section">
+        <div class="career-header">
+          <h3>투수 통산</h3>
+        </div>
+        <div class="table-wrap" id="career-pitcher-wrap"></div>
+      </section>
+    </section>
   `;
+
+  document.getElementById("career-hitter-wrap").innerHTML = createTableMarkup(
+    careerHitterColumns,
+    careerHitters2022To2025
+  );
+  document.getElementById("career-pitcher-wrap").innerHTML = createTableMarkup(
+    careerPitcherColumns,
+    careerPitchers2022To2025
+  );
 }
 
 function renderPlayerStats(year, type = "hitter") {
   if (type === "pitcher") {
     renderStatsTable({
-      title: year,
+      year,
       subtitle: `${year}년 투수 기록`,
       columns: pitcherColumns,
       rows: pitcherDataByYear[year] || [],
@@ -534,7 +856,7 @@ function renderPlayerStats(year, type = "hitter") {
   }
 
   renderStatsTable({
-    title: year,
+    year,
     subtitle: `${year}년 타자 기록`,
     columns: hitterColumns,
     rows: hitterDataByYear[year] || [],
@@ -550,7 +872,7 @@ function renderPlayerYear(year) {
 }
 
 function renderTotal() {
-  renderPlaceholder("통산기록", "통산기록 영역입니다.");
+  renderCareerPage();
 }
 
 function renderRank(type) {

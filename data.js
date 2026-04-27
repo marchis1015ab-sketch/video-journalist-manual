@@ -3157,6 +3157,20 @@
 
 const DEFAULT_PLAYERS = ["김대호","김민성","김성민","김안수","김예준","김은성","김지훈","김진광","김진우","박민혁","박인서","박재현","서복현","서봉원","오승렬","유규열","이근평","이도성","이민섭","이상엽","이승환","이완근","이재성","이종원","이학진","임인수","장민창","전영희","정원석","정해성","주문철","최대환","최민우","최효일","한재혁"];
 const PLAYERS = Array.from(new Set([...DEFAULT_PLAYERS, ...SOURCE_DATA.players])).sort((a, b) => a.localeCompare(b, 'ko'));
+const PLAYER_STATUS = [
+  { name: "서복현", status: "retired" },
+  { name: "이근평", status: "retired" },
+  { name: "이도성", status: "injured" },
+  { name: "이승환", status: "retired" },
+  { name: "이완근", status: "injured" },
+  { name: "임인수", status: "retired" },
+  { name: "최대환", status: "retired" },
+  { name: "최효일", status: "retired" },
+  { name: "한재혁", status: "retired" },
+];
+const PLAYER_STATUS_MAP = Object.fromEntries(
+  PLAYER_STATUS.map((entry) => [entry.name, entry.status])
+);
 const BATTER_STAT_KEYS = ['G','PA','AB','H','H1','D2','D3','HR','TB','RBI','R','SB','CS','SH','SF','BB','HBP','BBHBP','SO','GIDP'];
 const PITCHER_STAT_KEYS = ['G','GS','GR','W','L','SV','HLD','IP','BF','AB','H','HR','SH','SF','BB','HBP','BBHBP','SO','R','ER'];
 const STORAGE_KEYS = {

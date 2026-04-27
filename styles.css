@@ -84,6 +84,10 @@ body {
   gap: 18px;
 }
 
+.career-page {
+  gap: 24px;
+}
+
 .page-header {
   display: grid;
   gap: 6px;
@@ -155,6 +159,16 @@ body {
   box-shadow: none;
 }
 
+.career-section {
+  display: grid;
+  gap: 12px;
+}
+
+.career-header h3 {
+  margin: 0;
+  font-size: 22px;
+}
+
 .stats-table {
   width: 100%;
   min-width: 1680px;
@@ -185,6 +199,15 @@ body {
 .stats-table tbody tr.is-total {
   background: #fff7ed;
   font-weight: 700;
+}
+
+.stats-table tbody tr.retired {
+  background: #ff8c00;
+  color: #ffffff;
+}
+
+.stats-table tbody tr.injured {
+  background: #ffd580;
 }
 
 .stats-table th:first-child,
