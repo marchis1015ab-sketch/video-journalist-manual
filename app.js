@@ -869,6 +869,10 @@ function sortRowsByName(rows) {
   );
 }
 
+function getVisibleHitterRows(year) {
+  return (hitterDataByYear[year] || []).filter((row) => safeNumberLocal(row.g) > 0);
+}
+
 function setActiveMenu() {
   document.querySelectorAll(".menu-item").forEach((item) => {
     item.classList.toggle("active", item.dataset.menu === state.menu);
@@ -1139,7 +1143,7 @@ function renderPlayerStats(year, type = "hitter") {
     year,
     subtitle: `${year}년 타자 기록`,
     columns: hitterColumns,
-    rows: hitterDataByYear[year] || [],
+    rows: getVisibleHitterRows(year),
   });
 }
 
