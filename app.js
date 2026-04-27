@@ -3,6 +3,7 @@ const state = {
   teamYear: "2022",
   playerYear: "2022",
   playerType: "hitter",
+  totalType: "hitter",
   rankType: "hitter",
 };
 
@@ -705,6 +706,12 @@ const pitcherDataByYear = {
   "2025": pitcher2025,
 };
 
+function sortRowsByName(rows) {
+  return [...rows].sort((left, right) =>
+    String(left.name || "").localeCompare(String(right.name || ""), "ko")
+  );
+}
+
 function setActiveMenu() {
   document.querySelectorAll(".menu-item").forEach((item) => {
     item.classList.toggle("active", item.dataset.menu === state.menu);
@@ -716,6 +723,10 @@ function setActiveMenu() {
 
   document.querySelectorAll('.submenu[data-submenu="player"] [data-year]').forEach((item) => {
     item.classList.toggle("active", state.menu === "player" && item.dataset.year === state.playerYear);
+  });
+
+  document.querySelectorAll('.submenu[data-submenu="total"] [data-total-type]').forEach((item) => {
+    item.classList.toggle("active", state.menu === "total" && item.dataset.totalType === state.totalType);
   });
 
   document.querySelectorAll('.submenu[data-submenu="rank"] [data-type]').forEach((item) => {
@@ -811,37 +822,30 @@ function renderStatsTable({ year, subtitle, columns, rows }) {
   tableWrap.innerHTML = createTableMarkup(columns, rows);
 }
 
-function renderCareerPage() {
+function renderCareerPage(type) {
+  const isPitcher = type === "pitcher";
+  const title = isPitcher ? "투수 통산" : "타자 통산";
+  const rows = sortRowsByName(
+    isPitcher ? careerPitchers2022To2025 : careerHitters2022To2025
+  );
+  const columns = isPitcher ? careerPitcherColumns : careerHitterColumns;
   const container = document.getElementById("page-container");
   container.innerHTML = `
     <section class="page career-page">
       <div class="page-header">
-        <h2>통산기록</h2>
+        <h2>${title}</h2>
         <p>2022년~2025년 기준으로 2026 시즌을 제외해 다시 계산한 통산표입니다.</p>
       </div>
       <section class="career-section">
         <div class="career-header">
-          <h3>타자 통산</h3>
+          <h3>${title}</h3>
         </div>
-        <div class="table-wrap" id="career-hitter-wrap"></div>
-      </section>
-      <section class="career-section">
-        <div class="career-header">
-          <h3>투수 통산</h3>
-        </div>
-        <div class="table-wrap" id="career-pitcher-wrap"></div>
+        <div class="table-wrap" id="career-table-wrap"></div>
       </section>
     </section>
   `;
 
-  document.getElementById("career-hitter-wrap").innerHTML = createTableMarkup(
-    careerHitterColumns,
-    careerHitters2022To2025
-  );
-  document.getElementById("career-pitcher-wrap").innerHTML = createTableMarkup(
-    careerPitcherColumns,
-    careerPitchers2022To2025
-  );
+  document.getElementById("career-table-wrap").innerHTML = createTableMarkup(columns, rows);
 }
 
 function renderPlayerStats(year, type = "hitter") {
@@ -872,7 +876,7 @@ function renderPlayerYear(year) {
 }
 
 function renderTotal() {
-  renderCareerPage();
+  renderCareerPage(state.totalType);
 }
 
 function renderRank(type) {
@@ -941,9 +945,20 @@ function initRankClicks() {
   });
 }
 
+function initTotalClicks() {
+  document.querySelectorAll("[data-total-type]").forEach((el) => {
+    el.addEventListener("click", () => {
+      state.menu = "total";
+      state.totalType = el.dataset.totalType;
+      renderCurrentPage();
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initMenuClicks();
   initYearClicks();
+  initTotalClicks();
   initRankClicks();
   renderCurrentPage();
 });
