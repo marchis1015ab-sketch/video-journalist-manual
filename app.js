@@ -274,6 +274,8 @@ const HITTER_YEAR_REQUIRED_PLAYERS = {
   "2025": ["정해성", "최민우"],
 };
 
+const EXCLUDE_FROM_CAREER_BATTERS = ["강준형", "정병건"];
+
 function safeNumberLocal(value) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : 0;
@@ -323,6 +325,19 @@ function formatFractionalInnings(value) {
 
 function sortNamesKo(names) {
   return [...names].sort((left, right) => String(left || "").localeCompare(String(right || ""), "ko"));
+}
+
+function sortHitterYearNames(year, names) {
+  const sorted = sortNamesKo(names);
+
+  if (year !== "2024") {
+    return sorted;
+  }
+
+  const pinned = ["강준형", "정병건"];
+  const base = sorted.filter((name) => !pinned.includes(name));
+  const tail = pinned.filter((name) => sorted.includes(name));
+  return [...base, ...tail];
 }
 
 function getHistoricalBatterRows(year) {
@@ -379,7 +394,7 @@ function getDisplayPlayersForYear(type, year) {
     (HITTER_YEAR_REQUIRED_PLAYERS[year] || []).forEach((name) => names.add(name));
   }
 
-  return sortNamesKo(names);
+  return type === "hitter" ? sortHitterYearNames(year, names) : sortNamesKo(names);
 }
 
 function getAllPlayersFromYearlyData(type) {
@@ -654,7 +669,9 @@ function buildPitcherYearData(year) {
 }
 
 function buildCareerHitterData() {
-  const players = getAllPlayersFromYearlyData("hitter");
+  const players = getAllPlayersFromYearlyData("hitter").filter(
+    (name) => !EXCLUDE_FROM_CAREER_BATTERS.includes(name)
+  );
 
   return players.map((name) => {
     const totals = {
