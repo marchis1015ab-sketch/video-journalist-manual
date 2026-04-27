@@ -8,8 +8,6 @@ const state = {
 };
 
 const CAREER_YEARS = ["2022", "2023", "2024", "2025"];
-const CURRENT_GAMES = 78;
-const REQUIRED_PA = CURRENT_GAMES * 1.5;
 
 const hitterColumns = [
   { label: "이름", key: "name" },
@@ -879,8 +877,107 @@ function getVisibleCareerHitterRows() {
   return careerHitters2022To2025.filter((row) => safeNumberLocal(row.g) > 0);
 }
 
+function getCareerTeamGames() {
+  return CAREER_YEARS.reduce((total, year) => {
+    const hitterMax = (hitterDataByYear[year] || []).reduce(
+      (max, row) => Math.max(max, safeNumberLocal(row.g)),
+      0
+    );
+    const pitcherMax = (pitcherDataByYear[year] || []).reduce(
+      (max, row) => (row.isTotal ? max : Math.max(max, safeNumberLocal(row.g))),
+      0
+    );
+
+    return total + Math.max(hitterMax, pitcherMax);
+  }, 0);
+}
+
+function formatBaseballRate(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return ".000";
+  }
+
+  const fixed = numeric.toFixed(3);
+  return fixed.startsWith("0.") ? fixed.slice(1) : fixed;
+}
+
+function getRankingGuideStats() {
+  const rows = getVisibleCareerHitterRows();
+  const totals = rows.reduce(
+    (acc, row) => {
+      acc.h += safeNumberLocal(row.h);
+      acc.ab += safeNumberLocal(row.ab);
+      acc.bb += safeNumberLocal(row.bb);
+      acc.hbp += safeNumberLocal(row.hbp);
+      acc.sf += safeNumberLocal(row.sf);
+      acc.tb += safeNumberLocal(row.tb);
+      return acc;
+    },
+    {
+      h: 0,
+      ab: 0,
+      bb: 0,
+      hbp: 0,
+      sf: 0,
+      tb: 0,
+    }
+  );
+
+  const teamGames = getCareerTeamGames();
+  const requiredPA = Math.ceil(teamGames * 2.7);
+  const requiredIP = teamGames * 1.0;
+  const avg = totals.ab ? totals.h / totals.ab : 0;
+  const obpDenominator = totals.ab + totals.bb + totals.hbp + totals.sf;
+  const obp = obpDenominator ? (totals.h + totals.bb + totals.hbp) / obpDenominator : 0;
+  const slg = totals.ab ? totals.tb / totals.ab : 0;
+  const ops = obp + slg;
+
+  return {
+    teamGames,
+    requiredPA,
+    requiredIP,
+    avg: formatBaseballRate(avg),
+    obp: formatBaseballRate(obp),
+    slg: formatBaseballRate(slg),
+    ops: formatBaseballRate(ops),
+  };
+}
+
 function isQualifiedBatter(row) {
-  return safeNumberLocal(row.pa) >= REQUIRED_PA;
+  return safeNumberLocal(row.pa) >= getRankingGuideStats().requiredPA;
+}
+
+function renderRankingGuide() {
+  const guide = getRankingGuideStats();
+
+  return `
+    <section class="ranking-guide" aria-label="통산순위 기준 안내">
+      <div class="ranking-guide-header">
+        <h3>통산순위 기준 안내</h3>
+        <p>통산순위는 2022년~2025년 통산기록표를 기준으로 계산하며, 2026 시즌 기록은 포함하지 않습니다.</p>
+      </div>
+      <div class="ranking-guide-grid">
+        <article class="ranking-guide-card">
+          <h4>기준 계산</h4>
+          <ul class="ranking-guide-list">
+            <li>팀 총 경기 수: ${guide.teamGames}경기</li>
+            <li>규정타석: 팀 경기 수 × 2.7 = ${guide.requiredPA}타석</li>
+            <li>규정이닝: 팀 경기 수 × 1.0 = ${guide.requiredIP}이닝</li>
+            <li>팀 평균 AVG ${guide.avg} · OBP ${guide.obp} · SLG ${guide.slg} · OPS ${guide.ops}</li>
+          </ul>
+        </article>
+        <article class="ranking-guide-card">
+          <h4>지표 설명</h4>
+          <ul class="ranking-guide-list">
+            <li>RC: Runs Created. 타자의 출루와 장타 생산력을 바탕으로 득점 기여도를 추정한 지표입니다.</li>
+            <li>RC/18: 18아웃 기준 RC 환산값입니다. 경기당 생산력을 비교하기 쉽게 만든 보정 지표입니다.</li>
+            <li>XR: Extrapolated Runs. 안타, 장타, 볼넷 등 공격 이벤트별 가중치를 적용해 예상 득점 생산력을 계산한 지표입니다.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+  `;
 }
 
 function setActiveMenu() {
@@ -1333,6 +1430,7 @@ function renderRank(type) {
         <h2>통산순위 ${label}</h2>
         <p>2022년~2025년 통산기록표를 기준으로 계산한 항목별 순위입니다.</p>
       </div>
+      ${renderRankingGuide()}
       <div class="ranking-grid">
         ${blocksHtml}
       </div>

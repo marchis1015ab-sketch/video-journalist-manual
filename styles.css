@@ -92,6 +92,59 @@ body {
   gap: 20px;
 }
 
+.ranking-guide {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid #d0d5dd;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(16, 24, 40, 0.06);
+}
+
+.ranking-guide-header {
+  display: grid;
+  gap: 4px;
+}
+
+.ranking-guide-header h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.ranking-guide-header p {
+  margin: 0;
+  color: #475467;
+  line-height: 1.5;
+}
+
+.ranking-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.ranking-guide-card {
+  padding: 14px 16px;
+  border: 1px solid #eaecf0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.ranking-guide-card h4 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.ranking-guide-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  color: #344054;
+  line-height: 1.5;
+}
+
 .ranking-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(160px, 1fr));
@@ -356,6 +409,10 @@ body {
 }
 
 @media (max-width: 1200px) {
+  .ranking-guide-grid {
+    grid-template-columns: 1fr;
+  }
+
   .ranking-grid {
     grid-template-columns: repeat(3, minmax(180px, 1fr));
   }
@@ -382,6 +439,10 @@ body {
 }
 
 @media (max-width: 700px) {
+  .ranking-guide {
+    padding: 16px;
+  }
+
   .ranking-grid {
     grid-template-columns: 1fr;
   }
