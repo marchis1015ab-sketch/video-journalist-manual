@@ -1065,10 +1065,12 @@ function buildCompetitiveRankEntries(rows, config, options = {}) {
   const entries = [];
   let previousValue = null;
   let previousRank = 0;
+  const rankOffset = options.rankOffset || 0;
 
   sortedRows.forEach((row, index) => {
     const currentValue = normalizeRankingValue(row[config.key]);
-    const rank = index === 0 || currentValue !== previousValue ? index + 1 : previousRank;
+    const localRank = index === 0 || currentValue !== previousValue ? index + 1 : previousRank - rankOffset;
+    const rank = localRank + rankOffset;
     const qualified = typeof options.qualified === "function" ? options.qualified(row) : options.qualified;
     const underQualified =
       typeof options.underQualified === "function" ? options.underQualified(row) : options.underQualified;
@@ -1124,31 +1126,25 @@ function buildRankingEntries(rows, config, type) {
     const qualifiedRows = rows.filter((row) => isQualifiedBatter(row));
     const underQualifiedRows = rows.filter((row) => !isQualifiedBatter(row));
 
-    const qualifiedEntries = insertTopTenSeparator(
-      buildCompetitiveRankEntries(qualifiedRows, config, { qualified: true })
-    );
-    const underQualifiedEntries = sortRankingRows(underQualifiedRows, config).map((row) => ({
-      type: "player",
-      rank: null,
-      rankDisplay: "—",
-      snapshotRank: null,
-      name: row.name,
-      value: row[config.displayKey || config.key],
-      status: row.status || "active",
+    const qualifiedEntries = buildCompetitiveRankEntries(qualifiedRows, config, { qualified: true });
+    const lastQualifiedRank = qualifiedEntries.length
+      ? qualifiedEntries[qualifiedEntries.length - 1].rank
+      : 0;
+    const underQualifiedEntries = buildCompetitiveRankEntries(underQualifiedRows, config, {
       qualified: false,
-      highlightQualified: false,
       underQualified: true,
-    }));
+      rankOffset: lastQualifiedRank,
+    });
 
     if (!underQualifiedEntries.length) {
-      return qualifiedEntries;
+      return insertTopTenSeparator(qualifiedEntries);
     }
 
-    return [
+    return insertTopTenSeparator([
       ...qualifiedEntries,
       createSeparatorEntry("qualification-divider", "규정타석 미달"),
       ...underQualifiedEntries,
-    ];
+    ]);
   }
 
   const rankedEntries = buildCompetitiveRankEntries(rows, config, {
