@@ -1671,6 +1671,19 @@ function splitGameLogTokens(text) {
   });
 }
 
+function countPlateAppearancesInInning(value) {
+  const text = String(value || "").trim();
+  if (!text || text === "-" || text === "") {
+    return 0;
+  }
+
+  return text
+    .split("/")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .length;
+}
+
 function applyBatterEventToken(acc, token) {
   const text = normalizePlayerName(token);
   if (!text) {
@@ -1872,7 +1885,10 @@ function parseGameOneBattingEventRows(matrix) {
     };
 
     inningIndexes.forEach((columnIndex) => {
-      splitGameLogTokens(cells[columnIndex]).forEach((token) => applyBatterEventToken(eventTotals, token));
+      const inningValue = cells[columnIndex];
+      const paBefore = eventTotals.pa;
+      splitGameLogTokens(inningValue).forEach((token) => applyBatterEventToken(eventTotals, token));
+      eventTotals.pa = paBefore + countPlateAppearancesInInning(inningValue);
     });
 
     const summaryAb = parseStrictCountCell(cells[resolvedAbIndex]);
