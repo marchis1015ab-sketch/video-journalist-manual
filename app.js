@@ -11,8 +11,11 @@ const CAREER_YEARS = ["2022", "2023", "2024", "2025"];
 const TEAM_YEARS = ["2022", "2023", "2024", "2025", "2026"];
 const GAME_STORAGE_KEYS = {
   records: "watchdogs_game_records_v1",
+  records2026: "jtbc_watchdogs_2026_game_records_v1",
   batterLogs: "watchdogs_player_game_logs_v1",
   pitcherLogs: "watchdogs_pitcher_game_logs_v1",
+  drafts: "watchdogs_team_import_drafts_v1",
+  registeredPlayers: "watchdogs_registered_players_v1",
 };
 
 const hitterColumns = [
@@ -246,6 +249,13 @@ const pitcherRankConfigs = [
   { key: "baa", label: "피안타율", lowerIsBetter: true },
 ];
 
+["winPct", "era", "ra7", "bb7", "k7", "whip", "baa"].forEach((key) => {
+  const target = pitcherRankConfigs.find((config) => config.key === key);
+  if (target) {
+    target.separateQualification = true;
+  }
+});
+
 const player2022Overrides = {
   "김성민": {
     name: "김성민",
@@ -343,13 +353,15 @@ const HITTER_YEAR_REQUIRED_PLAYERS = {
 };
 
 const EXCLUDE_FROM_CAREER_BATTERS = ["강준형", "정병건"];
-const teamImportDrafts = {};
+let teamImportDrafts = {};
 const teamPageNotices = {};
 const expandedTeamRecordIds = new Set();
 
 let gameRecords = loadStoredJsonArray(GAME_STORAGE_KEYS.records);
 let playerGameLogs = loadStoredJsonArray(GAME_STORAGE_KEYS.batterLogs);
 let pitcherGameLogs = loadStoredJsonArray(GAME_STORAGE_KEYS.pitcherLogs);
+let registeredPlayers = loadStoredJsonArray(GAME_STORAGE_KEYS.registeredPlayers);
+teamImportDrafts = loadStoredJsonObject(GAME_STORAGE_KEYS.drafts);
 
 function safeNumberLocal(value) {
   const numeric = Number(value);
@@ -375,6 +387,25 @@ function loadStoredJsonArray(storageKey) {
   }
 }
 
+function loadStoredJsonObject(storageKey) {
+  if (typeof localStorage === "undefined") {
+    return {};
+  }
+
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) {
+      return {};
+    }
+
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch (error) {
+    console.warn("[watchdogs] 객체 데이터 로드 실패:", storageKey, error);
+    return {};
+  }
+}
+
 function saveStoredJsonArray(storageKey, value) {
   if (typeof localStorage === "undefined") {
     return;
@@ -387,10 +418,36 @@ function saveStoredJsonArray(storageKey, value) {
   }
 }
 
+function saveStoredJsonObject(storageKey, value) {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(value));
+  } catch (error) {
+    console.warn("[watchdogs] 객체 데이터 저장 실패:", storageKey, error);
+  }
+}
+
 function persistGameStorage() {
   saveStoredJsonArray(GAME_STORAGE_KEYS.records, gameRecords);
+  saveStoredJsonArray(
+    GAME_STORAGE_KEYS.records2026,
+    gameRecords.filter((record) => String(record.year) === "2026")
+  );
   saveStoredJsonArray(GAME_STORAGE_KEYS.batterLogs, playerGameLogs);
   saveStoredJsonArray(GAME_STORAGE_KEYS.pitcherLogs, pitcherGameLogs);
+}
+
+function persistTeamImportDrafts() {
+  saveStoredJsonObject(GAME_STORAGE_KEYS.drafts, teamImportDrafts);
+}
+
+function persistRegisteredPlayers() {
+  const uniquePlayers = Array.from(new Set((registeredPlayers || []).map((name) => normalizePlayerName(name)).filter(Boolean)));
+  registeredPlayers = uniquePlayers;
+  saveStoredJsonArray(GAME_STORAGE_KEYS.registeredPlayers, uniquePlayers);
 }
 
 function formatDecimal(value, digits = 3) {
@@ -1114,6 +1171,50 @@ function normalizePlayerName(name) {
   return String(name || "").replace(/\s+/g, "").trim();
 }
 
+function normalizeComparablePlayerName(name) {
+  return normalizePlayerName(name).replace(/[^가-힣A-Za-z]/g, "");
+}
+
+function findKnownPlayerMatch(name, extraPlayers = []) {
+  const comparable = normalizeComparablePlayerName(name);
+  if (!comparable) {
+    return "";
+  }
+
+  const knownPlayers = getKnownPlayers(extraPlayers);
+  const exact = knownPlayers.find((player) => normalizeComparablePlayerName(player) === comparable);
+  if (exact) {
+    return exact;
+  }
+
+  return knownPlayers.find((player) => comparable.includes(normalizeComparablePlayerName(player)) || normalizeComparablePlayerName(player).includes(comparable)) || "";
+}
+
+function getKnownPlayers(extraPlayers = []) {
+  return Array.from(
+    new Set(
+      [...(Array.isArray(PLAYERS) ? PLAYERS : []), ...(registeredPlayers || []), ...(extraPlayers || [])]
+        .map((name) => normalizePlayerName(name))
+        .filter(Boolean)
+    )
+  );
+}
+
+function hasKnownPlayer(name, extraPlayers = []) {
+  return getKnownPlayers(extraPlayers).includes(normalizePlayerName(name));
+}
+
+function ensureRegisteredPlayer(name) {
+  const normalized = normalizePlayerName(name);
+  if (!normalized || hasKnownPlayer(normalized)) {
+    return normalized;
+  }
+
+  registeredPlayers = [...(registeredPlayers || []), normalized];
+  persistRegisteredPlayers();
+  return normalized;
+}
+
 function createEmptyTeamBattingSummary() {
   return {
     hits: 0,
@@ -1135,6 +1236,7 @@ function createEmptyNormalizedRecord(year = state.teamYear) {
     id: "",
     year,
     date: "",
+    gameTitle: "",
     opponent: "",
     result: "",
     scoreFor: 0,
@@ -1151,19 +1253,111 @@ function createEmptyNormalizedRecord(year = state.teamYear) {
   };
 }
 
+function createEmptyTeamImportDraft(year = state.teamYear, seed = {}) {
+  const sourceUrl = String(seed.sourceUrl || "").trim();
+  const rawText = String(seed.rawText || seed.sourceText || "").trim();
+  const pendingRegisteredPlayers = Array.isArray(seed.pendingRegisteredPlayers)
+    ? seed.pendingRegisteredPlayers.map((name) => normalizePlayerName(name)).filter(Boolean)
+    : [];
+  const baseRecord = seed.record
+    ? normalizeGameRecord(seed.record, {
+        year,
+        sourceUrl,
+        sourceText: rawText,
+        matchingMap: seed.record.matchingMap || seed.matchingMap || {},
+        additionalPlayers: pendingRegisteredPlayers,
+        createdAt: seed.record.createdAt,
+      })
+    : createEmptyNormalizedRecord(year);
+
+  return {
+    year: String(year),
+    sourceUrl,
+    rawText,
+    parsedSourceUrl: String(seed.parsedSourceUrl ?? (seed.record ? sourceUrl : "")).trim(),
+    parsedRawText: String(seed.parsedRawText ?? (seed.record ? rawText : "")).trim(),
+    pendingRegisteredPlayers,
+    warnings: Array.isArray(seed.warnings) ? seed.warnings : [],
+    record: baseRecord,
+    originalPreview: rawText,
+    updatedAt: seed.updatedAt || new Date().toISOString(),
+  };
+}
+
+function extractPlayerNameFromLine(line, extraPlayers = []) {
+  const source = String(line || "");
+  const candidates = getKnownPlayers(extraPlayers).sort((left, right) => right.length - left.length);
+
+  for (const player of candidates) {
+    const comparablePlayer = normalizeComparablePlayerName(player);
+    if (!comparablePlayer) {
+      continue;
+    }
+
+    const comparableSource = normalizeComparablePlayerName(source);
+    if (!comparableSource.includes(comparablePlayer)) {
+      continue;
+    }
+
+    const directIndex = source.indexOf(player);
+    if (directIndex >= 0) {
+      const remaining = `${source.slice(0, directIndex)} ${source.slice(directIndex + player.length)}`.replace(/\s+/g, " ").trim();
+      return { player, remaining };
+    }
+
+    const stripped = source.replace(/[^\w가-힣\s./:-]/g, " ");
+    const strippedIndex = stripped.indexOf(player);
+    if (strippedIndex >= 0) {
+      const remaining = `${stripped.slice(0, strippedIndex)} ${stripped.slice(strippedIndex + player.length)}`.replace(/\s+/g, " ").trim();
+      return { player, remaining };
+    }
+  }
+
+  return { player: "", remaining: source.trim() };
+}
+
+function getTeamImportDraft(year) {
+  const stored = teamImportDrafts[String(year)];
+  if (!stored) {
+    return createEmptyTeamImportDraft(year);
+  }
+  return createEmptyTeamImportDraft(year, stored);
+}
+
+function saveTeamImportDraft(year, draft) {
+  teamImportDrafts[String(year)] = createEmptyTeamImportDraft(year, draft);
+  persistTeamImportDrafts();
+}
+
+function clearTeamImportDraft(year) {
+  delete teamImportDrafts[String(year)];
+  persistTeamImportDrafts();
+}
+
 function splitPlainTextRow(line) {
-  if (line.includes("\t")) {
-    return line.split("\t").map((cell) => cell.trim()).filter((cell) => cell !== "");
+  const normalizedLine = String(line || "").replace(/\u00a0/g, " ").trim();
+  const extractedPlayer = extractPlayerNameFromLine(normalizedLine);
+  if (extractedPlayer.player) {
+    const numericTokens = extractedPlayer.remaining
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter(Boolean);
+    if (numericTokens.length >= 4) {
+      return [extractedPlayer.player, ...numericTokens];
+    }
   }
 
-  if (line.includes("|")) {
-    return line
+  if (normalizedLine.includes("\t")) {
+    return normalizedLine.split("\t").map((cell) => cell.trim());
+  }
+
+  if (normalizedLine.includes("|")) {
+    return normalizedLine
       .split("|")
-      .map((cell) => cell.trim())
-      .filter((cell) => cell !== "");
+      .map((cell) => cell.trim());
   }
 
-  return line
+  return normalizedLine
     .split(/\s{2,}/)
     .map((cell) => cell.trim())
     .filter((cell) => cell !== "");
@@ -1174,9 +1368,8 @@ function matrixFromTableElement(table) {
     .map((row) =>
       Array.from(row.querySelectorAll("th,td"))
         .map((cell) => cell.textContent.replace(/\s+/g, " ").trim())
-        .filter((cell) => cell !== "")
     )
-    .filter((row) => row.length);
+    .filter((row) => row.some((cell) => cell !== ""));
 }
 
 function extractTableBlocksFromHtml(rawText) {
@@ -1265,8 +1458,38 @@ function parseIntegerCell(value) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
+function parseStrictCountCell(value) {
+  const text = String(value ?? "").replace(/,/g, "").trim();
+  if (!text) {
+    return { value: 0, suspicious: false, raw: text };
+  }
+
+  if (/^-?\d+$/.test(text)) {
+    const numeric = Number(text);
+    return {
+      value: Number.isFinite(numeric) && numeric >= 0 ? numeric : 0,
+      suspicious: numeric < 0,
+      raw: text,
+    };
+  }
+
+  if (/^-?(?:\d+\.\d+|\.\d+)$/.test(text)) {
+    return { value: 0, suspicious: true, raw: text, reason: "decimal" };
+  }
+
+  return { value: 0, suspicious: true, raw: text, reason: "invalid" };
+}
+
+function parseCountValue(value) {
+  return parseStrictCountCell(value).value;
+}
+
 function parseInningCell(value) {
-  const text = String(value || "").trim();
+  const text = String(value || "")
+    .replace(/\u2153/g, " 1/3")
+    .replace(/\u2154/g, " 2/3")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!text) {
     return 0;
   }
@@ -1350,7 +1573,368 @@ function derivePitchingDisplayStats(row) {
   };
 }
 
+function parseBatterSlotLabel(label, extraPlayers = []) {
+  const raw = String(label || "").trim();
+  const battingOrderMatch = raw.match(/^(\d+)/);
+  const battingOrder = battingOrderMatch ? parseIntegerCell(battingOrderMatch[1]) : 0;
+  const numberMatch = raw.match(/\((\d+)\)/);
+  const number = numberMatch ? parseIntegerCell(numberMatch[1]) : "";
+  const withoutOrder = raw.replace(/^\d+/, "");
+  const withoutNumber = withoutOrder.replace(/\(\d+\)/g, "").trim();
+  const matchedPlayer = findKnownPlayerMatch(withoutNumber, extraPlayers) || extractPlayerNameFromLine(withoutNumber, extraPlayers).player || normalizePlayerName(withoutNumber);
+  const position = sanitizeDraftText(withoutNumber.replace(matchedPlayer, ""));
+
+  return {
+    battingOrder,
+    position,
+    player: matchedPlayer,
+    originalPlayer: matchedPlayer || normalizePlayerName(withoutNumber),
+    number,
+  };
+}
+
+function parsePitcherLabel(label, extraPlayers = []) {
+  const raw = String(label || "").trim();
+  const numberMatch = raw.match(/\((\d+)\)/);
+  const number = numberMatch ? parseIntegerCell(numberMatch[1]) : "";
+  const cleaned = raw.replace(/\(\d+\)/g, "").trim();
+  const matchedPlayer = findKnownPlayerMatch(cleaned, extraPlayers) || extractPlayerNameFromLine(cleaned, extraPlayers).player || normalizePlayerName(cleaned);
+  return {
+    player: matchedPlayer,
+    originalPlayer: matchedPlayer || normalizePlayerName(cleaned),
+    number,
+  };
+}
+
+function normalizePitcherResultText(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "-";
+  }
+  if (text.includes("승")) {
+    return "승";
+  }
+  if (text.includes("패")) {
+    return "패";
+  }
+  return "-";
+}
+
+function cleanPlayerName(name) {
+  return String(name || "").replace(/\(\d+\)/g, "").trim();
+}
+
+function normalizePitchCount(value) {
+  const text = String(value ?? "").trim();
+  if (!text || text === "0" || text === "-") {
+    return "-";
+  }
+  return /^\d+$/.test(text) ? text : "-";
+}
+
+function normalizePitcherRow(row) {
+  const source = Array.isArray(row) ? row : [];
+  const clean = Array.from({ length: 19 }, (_, index) => {
+    const value = source[index];
+    const text = String(value ?? "").trim();
+    return text || "-";
+  });
+
+  clean[0] = cleanPlayerName(clean[0]);
+  clean[1] = normalizePitcherResultText(clean[1]);
+  clean[16] = normalizePitchCount(clean[16]);
+
+  return clean;
+}
+
+function splitGameLogTokens(text) {
+  const normalized = String(text || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[→]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized || normalized === "-" || normalized === " " || normalized === "대수비") {
+    return [];
+  }
+
+  const roughTokens = normalized
+    .split(/[,\n;/]+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  return roughTokens.flatMap((token) => {
+    if (token.includes(" ") && !/^\d+\s*(?:1\/3|2\/3)$/.test(token)) {
+      return token.split(/\s+/).map((part) => part.trim()).filter(Boolean);
+    }
+    return [token];
+  });
+}
+
+function applyBatterEventToken(acc, token) {
+  const text = normalizePlayerName(token);
+  if (!text) {
+    return;
+  }
+
+  if (/대수비/.test(text)) {
+    return;
+  }
+
+  if (/도루/.test(text) && !/(안|홈런|2|3|삼진|땅|플|4구|사구|희번|희타|희플|병살)/.test(text)) {
+    acc.sb += 1;
+    return;
+  }
+
+  if (/폭투|포일/.test(text)) {
+    return;
+  }
+
+  if (/주자아웃/.test(text)) {
+    acc.outs += 1;
+    return;
+  }
+
+  if (/\d.*R$|땅R|야선|선택수비|FC/.test(text)) {
+    acc.pa += 1;
+    acc.ab += 1;
+    acc.outs += 1;
+    return;
+  }
+
+  if (/희번|희타/.test(text)) {
+    acc.pa += 1;
+    acc.sh += 1;
+    acc.outs += 1;
+    return;
+  }
+
+  if (/희플/.test(text)) {
+    acc.pa += 1;
+    acc.sf += 1;
+    acc.outs += 1;
+    return;
+  }
+
+  if (/4구/.test(text)) {
+    acc.pa += 1;
+    acc.bb += 1;
+    return;
+  }
+
+  if (/사구/.test(text)) {
+    acc.pa += 1;
+    acc.hbp += 1;
+    return;
+  }
+
+  if (/낫아웃-/.test(text)) {
+    acc.pa += 1;
+    acc.ab += 1;
+    acc.so += 1;
+    return;
+  }
+
+  if (/낫아웃/.test(text)) {
+    acc.pa += 1;
+    acc.ab += 1;
+    acc.so += 1;
+    acc.outs += 1;
+    return;
+  }
+
+  if (/병살/.test(text)) {
+    acc.pa += 1;
+    acc.ab += 1;
+    acc.dp += 1;
+    acc.outs += 2;
+    return;
+  }
+
+  if (/삼진/.test(text)) {
+    acc.pa += 1;
+    acc.ab += 1;
+    acc.so += 1;
+    acc.outs += 1;
+    return;
+  }
+
+  if (/홈런|HR|홈인/.test(text)) {
+    acc.pa += 1;
+    acc.ab += 1;
+    acc.h += 1;
+    acc.hr += 1;
+    return;
+  }
+
+  if (/3루|3$/.test(text) && /안|선|중|우|좌|내|인/.test(text)) {
+    acc.pa += 1;
+    acc.ab += 1;
+    acc.h += 1;
+    acc.d3 += 1;
+    return;
+  }
+
+  if (/2루|2$/.test(text) && /안|선|중|우|좌|내|인/.test(text)) {
+    acc.pa += 1;
+    acc.ab += 1;
+    acc.h += 1;
+    acc.d2 += 1;
+    return;
+  }
+
+  if (/안/.test(text)) {
+    acc.pa += 1;
+    acc.ab += 1;
+    acc.h += 1;
+    return;
+  }
+
+  if (/실책|E\d*/i.test(text)) {
+    acc.pa += 1;
+    acc.ab += 1;
+    return;
+  }
+
+  if (/땅|플|뜬|직|파울|비|라인/.test(text)) {
+    acc.pa += 1;
+    acc.ab += 1;
+    acc.outs += 1;
+    return;
+  }
+
+  acc.unknown.push(text);
+}
+
+function parseGameOneBattingEventRows(matrix) {
+  const headerIndex = findBestHeaderIndex(matrix, ["선수", "1", "2", "3", "타수", "안타"]);
+  if (headerIndex === -1) {
+    return [];
+  }
+
+  const header = matrix[headerIndex].map((cell) => String(cell || "").trim());
+  const normalizedHeader = header.map((cell) => normalizeHeaderKey(cell));
+  const inningIndexes = normalizedHeader
+    .map((cell, index) => (/^\d+$/.test(cell) ? index : -1))
+    .filter((index) => index >= 0);
+
+  const nameIndex = normalizedHeader.findIndex((cell) => cell === normalizeHeaderKey("선수") || cell === normalizeHeaderKey("선수명")) >= 0
+    ? normalizedHeader.findIndex((cell) => cell === normalizeHeaderKey("선수") || cell === normalizeHeaderKey("선수명"))
+    : 0;
+  const abIndex = normalizedHeader.findIndex((cell) => cell === normalizeHeaderKey("타수") || cell === "ab");
+  const hIndex = normalizedHeader.findIndex((cell) => cell === normalizeHeaderKey("안타") || cell === normalizeHeaderKey("총안타") || cell === "h");
+  const rbiIndex = normalizedHeader.findIndex((cell) => cell === normalizeHeaderKey("타점") || cell === "rbi");
+  const rIndex = normalizedHeader.findIndex((cell) => cell === normalizeHeaderKey("득점") || cell === "r");
+  const sbIndex = normalizedHeader.findIndex((cell) => cell === normalizeHeaderKey("도루") || cell === "sb");
+  const fallbackAbIndex = header.length - 7;
+  const fallbackHIndex = header.length - 6;
+  const fallbackRbiIndex = header.length - 5;
+  const fallbackRIndex = header.length - 4;
+  const fallbackSbIndex = header.length - 3;
+  const resolvedAbIndex = abIndex >= 0 ? abIndex : fallbackAbIndex;
+  const resolvedHIndex = hIndex >= 0 ? hIndex : fallbackHIndex;
+  const resolvedRbiIndex = rbiIndex >= 0 ? rbiIndex : fallbackRbiIndex;
+  const resolvedRIndex = rIndex >= 0 ? rIndex : fallbackRIndex;
+  const resolvedSbIndex = sbIndex >= 0 ? sbIndex : fallbackSbIndex;
+
+  if (inningIndexes.length < 3 || resolvedAbIndex < 0 || resolvedHIndex < 0) {
+    return [];
+  }
+
+  const rows = [];
+  matrix.slice(headerIndex + 1).forEach((cells) => {
+    const rawName = String(cells[nameIndex] || "").trim();
+    if (!rawName || isSummaryName(rawName)) {
+      return;
+    }
+
+    const slot = parseBatterSlotLabel(rawName);
+    if (!slot.player) {
+      return;
+    }
+
+    const eventTotals = {
+      pa: 0,
+      ab: 0,
+      h: 0,
+      d2: 0,
+      d3: 0,
+      hr: 0,
+      bb: 0,
+      hbp: 0,
+      so: 0,
+      sh: 0,
+      sf: 0,
+      sb: 0,
+      dp: 0,
+      outs: 0,
+      unknown: [],
+    };
+
+    inningIndexes.forEach((columnIndex) => {
+      splitGameLogTokens(cells[columnIndex]).forEach((token) => applyBatterEventToken(eventTotals, token));
+    });
+
+    const summaryAb = parseStrictCountCell(cells[resolvedAbIndex]);
+    const summaryH = parseStrictCountCell(cells[resolvedHIndex]);
+    const summaryRbi = resolvedRbiIndex >= 0 ? parseStrictCountCell(cells[resolvedRbiIndex]) : { value: 0, suspicious: false };
+    const summaryR = resolvedRIndex >= 0 ? parseStrictCountCell(cells[resolvedRIndex]) : { value: 0, suspicious: false };
+    const summarySb = resolvedSbIndex >= 0 ? parseStrictCountCell(cells[resolvedSbIndex]) : { value: 0, suspicious: false };
+
+    const flaggedFields = [];
+    if (summaryAb.suspicious) flaggedFields.push("타수");
+    if (summaryH.suspicious) flaggedFields.push("안타");
+    if (summaryRbi.suspicious) flaggedFields.push("타점");
+    if (summaryR.suspicious) flaggedFields.push("득점");
+    if (summarySb.suspicious) flaggedFields.push("도루");
+    if (eventTotals.unknown.length) flaggedFields.push(`미해석 이벤트:${eventTotals.unknown.join("/")}`);
+    if (summaryAb.value !== eventTotals.ab) flaggedFields.push("타수 요약 불일치");
+    if (summaryH.value !== eventTotals.h) flaggedFields.push("안타 요약 불일치");
+    if (summarySb.value !== eventTotals.sb) flaggedFields.push("도루 요약 불일치");
+
+    const display = deriveBattingDisplayStats({
+      ...eventTotals,
+      tb: Math.max(0, eventTotals.h - eventTotals.d2 - eventTotals.d3 - eventTotals.hr) + eventTotals.d2 * 2 + eventTotals.d3 * 3 + eventTotals.hr * 4,
+    });
+
+    rows.push({
+      player: slot.player,
+      originalPlayer: slot.originalPlayer,
+      battingOrder: slot.battingOrder,
+      pos: slot.position,
+      number: slot.number,
+      pa: eventTotals.pa,
+      ab: eventTotals.ab,
+      h: eventTotals.h,
+      d2: eventTotals.d2,
+      d3: eventTotals.d3,
+      hr: eventTotals.hr,
+      tb: display.tb,
+      rbi: summaryRbi.value,
+      r: summaryR.value,
+      sb: summarySb.value,
+      bb: eventTotals.bb,
+      hbp: eventTotals.hbp,
+      so: eventTotals.so,
+      sf: eventTotals.sf,
+      sh: eventTotals.sh,
+      avg: display.avg,
+      obp: display.obp,
+      slg: display.slg,
+      ops: display.ops,
+      _draftFlags: flaggedFields,
+    });
+  });
+
+  return rows;
+}
+
 function parseBattingRowsFromMatrix(matrix) {
+  const eventRows = parseGameOneBattingEventRows(matrix);
+  if (eventRows.length) {
+    return eventRows;
+  }
+
   const headerIndex = findBestHeaderIndex(matrix, ["선수", "선수명", "이름", "타석", "타수", "안타"]);
   if (headerIndex === -1) {
     return [];
@@ -1362,28 +1946,41 @@ function parseBattingRowsFromMatrix(matrix) {
 
   dataRows.forEach((cells) => {
     const row = buildRowObject(header, cells);
-    const name = normalizePlayerName(getCellValue(row, ["선수명", "선수", "이름"]));
+    const slot = parseBatterSlotLabel(getCellValue(row, ["선수명", "선수", "이름"]));
+    const name = normalizePlayerName(slot.originalPlayer || slot.player);
     if (isSummaryName(name)) {
       return;
     }
 
+    const flaggedFields = [];
+    const parseCountField = (aliases, fieldName) => {
+      const parsed = parseStrictCountCell(getCellValue(row, aliases));
+      if (parsed.suspicious) {
+        flaggedFields.push(fieldName);
+      }
+      return parsed.value;
+    };
     const parsed = {
-      player: name,
-      pa: parseIntegerCell(getCellValue(row, ["타석", "pa"])),
-      ab: parseIntegerCell(getCellValue(row, ["타수", "ab"])),
-      h: parseIntegerCell(getCellValue(row, ["총안타", "안타", "h"])),
-      d2: parseIntegerCell(getCellValue(row, ["2루타", "2b"])),
-      d3: parseIntegerCell(getCellValue(row, ["3루타", "3b"])),
-      hr: parseIntegerCell(getCellValue(row, ["홈런", "hr"])),
-      rbi: parseIntegerCell(getCellValue(row, ["타점", "rbi"])),
-      r: parseIntegerCell(getCellValue(row, ["득점", "r"])),
-      sb: parseIntegerCell(getCellValue(row, ["도루", "sb"])),
-      bb: parseIntegerCell(getCellValue(row, ["볼넷", "bb"])),
-      hbp: parseIntegerCell(getCellValue(row, ["사구", "hbp"])),
-      so: parseIntegerCell(getCellValue(row, ["삼진", "so"])),
-      sf: parseIntegerCell(getCellValue(row, ["희생플라이", "희플", "sf"])),
-      sh: parseIntegerCell(getCellValue(row, ["희생번트", "희생타", "희타", "sh"])),
-      tb: parseIntegerCell(getCellValue(row, ["루타", "tb"])),
+      player: slot.player || findKnownPlayerMatch(name) || name,
+      originalPlayer: slot.originalPlayer || name,
+      battingOrder: slot.battingOrder,
+      pos: slot.position,
+      number: slot.number,
+      pa: parseCountField(["타석", "pa"], "타석"),
+      ab: parseCountField(["타수", "ab"], "타수"),
+      h: parseCountField(["총안타", "안타", "h"], "안타"),
+      d2: parseCountField(["2루타", "2b"], "2루타"),
+      d3: parseCountField(["3루타", "3b"], "3루타"),
+      hr: parseCountField(["홈런", "hr"], "홈런"),
+      rbi: parseCountField(["타점", "rbi"], "타점"),
+      r: parseCountField(["득점", "r"], "득점"),
+      sb: parseCountField(["도루", "sb"], "도루"),
+      bb: parseCountField(["볼넷", "bb"], "볼넷"),
+      hbp: parseCountField(["사구", "hbp"], "사구"),
+      so: parseCountField(["삼진", "so"], "삼진"),
+      sf: parseCountField(["희생플라이", "희플", "sf"], "희생플라이"),
+      sh: parseCountField(["희생번트", "희생타", "희타", "sh"], "희생번트"),
+      tb: parseCountField(["루타", "tb"], "루타"),
     };
 
     const display = deriveBattingDisplayStats(parsed);
@@ -1394,6 +1991,7 @@ function parseBattingRowsFromMatrix(matrix) {
       obp: display.obp,
       slg: display.slg,
       ops: display.ops,
+      _draftFlags: flaggedFields,
     });
   });
 
@@ -1409,36 +2007,196 @@ function parsePitcherRowsFromMatrix(matrix) {
   const header = matrix[headerIndex].map((cell) => normalizeHeaderKey(cell));
   const dataRows = matrix.slice(headerIndex + 1);
   const rows = [];
+  const nameIndex = header.findIndex((cell) => cell === normalizeHeaderKey("선수") || cell === normalizeHeaderKey("선수명") || cell === normalizeHeaderKey("이름")) >= 0
+    ? header.findIndex((cell) => cell === normalizeHeaderKey("선수") || cell === normalizeHeaderKey("선수명") || cell === normalizeHeaderKey("이름"))
+    : 0;
+  const resultIndex = header.findIndex((cell) => cell === normalizeHeaderKey("결과") || cell === "wls") >= 0
+    ? header.findIndex((cell) => cell === normalizeHeaderKey("결과") || cell === "wls")
+    : 1;
+  const inningIndex = header.findIndex((cell) => cell === normalizeHeaderKey("이닝") || cell === "ip") >= 0
+    ? header.findIndex((cell) => cell === normalizeHeaderKey("이닝") || cell === "ip")
+    : 2;
+  const bfIndex = header.findIndex((cell) => cell === normalizeHeaderKey("타자") || cell === normalizeHeaderKey("상대타자") || cell === "bf");
+  const abIndex = header.findIndex((cell) => cell === normalizeHeaderKey("타수") || cell === "ab");
+  const hIndex = header.findIndex((cell) => cell === normalizeHeaderKey("피안타") || cell === normalizeHeaderKey("안타") || cell === "h");
+  const hrIndex = header.findIndex((cell) => cell === normalizeHeaderKey("피홈런") || cell === "hr");
+  const bbIndex = header.findIndex((cell) => cell === normalizeHeaderKey("볼넷") || cell === "bb");
+  const hbpIndex = header.findIndex((cell) => cell === normalizeHeaderKey("사구") || cell === "hbp");
+  const soIndex = header.findIndex((cell) => cell === normalizeHeaderKey("탈삼진") || cell === normalizeHeaderKey("삼진") || cell === "so");
+  const rIndex = header.findIndex((cell) => cell === normalizeHeaderKey("실점") || cell === "r");
+  const erIndex = header.findIndex((cell) => cell === normalizeHeaderKey("자책") || cell === normalizeHeaderKey("자책점") || cell === "er");
 
   dataRows.forEach((cells) => {
     const row = buildRowObject(header, cells);
-    const name = normalizePlayerName(getCellValue(row, ["선수명", "선수", "이름"]));
+    const pitcherLabel = parsePitcherLabel(cells[nameIndex] ?? getCellValue(row, ["선수명", "선수", "이름"]));
+    const name = normalizePlayerName(pitcherLabel.originalPlayer || pitcherLabel.player);
     if (isSummaryName(name)) {
       return;
     }
 
-    const resultText = String(getCellValue(row, ["결과", "wls", "비고"])).trim();
+    const resultText = String(cells[resultIndex] ?? getCellValue(row, ["결과", "wls", "비고"])).trim();
+    const flaggedFields = [];
+    const parseCountField = (aliases, fieldName) => {
+      const parsed = parseStrictCountCell(getCellValue(row, aliases));
+      if (parsed.suspicious) {
+        flaggedFields.push(fieldName);
+      }
+      return parsed.value;
+    };
+    const parseDirectCount = (value, fieldName) => {
+      const parsed = parseStrictCountCell(value);
+      if (parsed.suspicious) {
+        flaggedFields.push(fieldName);
+      }
+      return parsed.value;
+    };
     const parsed = {
-      player: name,
-      ip: parseInningCell(getCellValue(row, ["이닝", "ip"])),
-      bf: parseIntegerCell(getCellValue(row, ["타자", "상대타자", "bf"])),
-      ab: parseIntegerCell(getCellValue(row, ["타수", "ab"])),
-      h: parseIntegerCell(getCellValue(row, ["피안타", "안타", "h"])),
-      hr: parseIntegerCell(getCellValue(row, ["피홈런", "hr"])),
-      bb: parseIntegerCell(getCellValue(row, ["볼넷", "bb"])),
-      hbp: parseIntegerCell(getCellValue(row, ["사구", "hbp"])),
-      so: parseIntegerCell(getCellValue(row, ["탈삼진", "삼진", "so"])),
-      r: parseIntegerCell(getCellValue(row, ["실점", "r"])),
-      er: parseIntegerCell(getCellValue(row, ["자책", "자책점", "er"])),
-      w: parseIntegerCell(getCellValue(row, ["승", "w"])) || (resultText.includes("승") ? 1 : 0),
-      l: parseIntegerCell(getCellValue(row, ["패", "l"])) || (resultText.includes("패") ? 1 : 0),
-      sv: parseIntegerCell(getCellValue(row, ["세이브", "세", "sv"])) || (resultText.includes("세") ? 1 : 0),
-      hld: parseIntegerCell(getCellValue(row, ["홀드", "hld"])) || (resultText.includes("홀") ? 1 : 0),
+      player: pitcherLabel.player || findKnownPlayerMatch(name) || name,
+      originalPlayer: pitcherLabel.originalPlayer || name,
+      number: pitcherLabel.number,
+      ip: parseInningCell(cells[inningIndex] ?? getCellValue(row, ["이닝", "ip"])),
+      bf: parseDirectCount(cells[bfIndex] ?? getCellValue(row, ["타자", "상대타자", "bf"]), "타자"),
+      ab: parseDirectCount(cells[abIndex] ?? getCellValue(row, ["타수", "ab"]), "타수"),
+      h: parseDirectCount(cells[hIndex] ?? getCellValue(row, ["피안타", "안타", "h"]), "피안타"),
+      hr: parseDirectCount(cells[hrIndex] ?? getCellValue(row, ["피홈런", "hr"]), "피홈런"),
+      bb: parseDirectCount(cells[bbIndex] ?? getCellValue(row, ["볼넷", "bb"]), "볼넷"),
+      hbp: parseDirectCount(cells[hbpIndex] ?? getCellValue(row, ["사구", "hbp"]), "사구"),
+      so: parseDirectCount(cells[soIndex] ?? getCellValue(row, ["탈삼진", "삼진", "so"]), "탈삼진"),
+      r: parseDirectCount(cells[rIndex] ?? getCellValue(row, ["실점", "r"]), "실점"),
+      er: parseDirectCount(cells[erIndex] ?? getCellValue(row, ["자책", "자책점", "er"]), "자책"),
+      w: parseCountField(["승", "w"], "승") || (resultText.includes("승") ? 1 : 0),
+      l: parseCountField(["패", "l"], "패") || (resultText.includes("패") ? 1 : 0),
+      sv: parseCountField(["세이브", "세", "sv"], "세이브") || (resultText.includes("세") ? 1 : 0),
+      hld: parseCountField(["홀드", "hld"], "홀드") || (resultText.includes("홀") ? 1 : 0),
+      resultText,
     };
 
     rows.push({
       ...parsed,
       era: derivePitchingDisplayStats(parsed).era,
+      _draftFlags: flaggedFields,
+    });
+  });
+
+  return rows;
+}
+
+function parsePitcherRowsFromMatrix(matrix) {
+  const headerIndex = findBestHeaderIndex(matrix, ["선수", "선수명", "이름", "이닝", "피안타", "삼진"]);
+  if (headerIndex === -1) {
+    return [];
+  }
+
+  const header = matrix[headerIndex].map((cell) => normalizeHeaderKey(cell));
+  const dataRows = matrix.slice(headerIndex + 1);
+  const rows = [];
+  const nameIndex =
+    header.findIndex((cell) => cell === normalizeHeaderKey("선수") || cell === normalizeHeaderKey("선수명") || cell === normalizeHeaderKey("이름")) >= 0
+      ? header.findIndex((cell) => cell === normalizeHeaderKey("선수") || cell === normalizeHeaderKey("선수명") || cell === normalizeHeaderKey("이름"))
+      : 0;
+  const resultIndex =
+    header.findIndex((cell) => cell === normalizeHeaderKey("결과") || cell === "wls") >= 0
+      ? header.findIndex((cell) => cell === normalizeHeaderKey("결과") || cell === "wls")
+      : 1;
+  const inningIndex =
+    header.findIndex((cell) => cell === normalizeHeaderKey("이닝") || cell === "ip") >= 0
+      ? header.findIndex((cell) => cell === normalizeHeaderKey("이닝") || cell === "ip")
+      : 2;
+  const bfIndex = header.findIndex((cell) => cell === normalizeHeaderKey("타자") || cell === normalizeHeaderKey("상대타자") || cell === "bf");
+  const abIndex = header.findIndex((cell) => cell === normalizeHeaderKey("타수") || cell === "ab");
+  const hIndex = header.findIndex((cell) => cell === normalizeHeaderKey("피안타") || cell === normalizeHeaderKey("안타") || cell === "h");
+  const hrIndex = header.findIndex((cell) => cell === normalizeHeaderKey("피홈런") || cell === "hr");
+  const shIndex = header.findIndex((cell) => cell === normalizeHeaderKey("희타") || cell === "sh");
+  const sfIndex = header.findIndex((cell) => cell === normalizeHeaderKey("희비") || cell === normalizeHeaderKey("희생플라이") || cell === "sf");
+  const bbIndex = header.findIndex((cell) => cell === normalizeHeaderKey("볼넷") || cell === "bb");
+  const hbpIndex = header.findIndex((cell) => cell === normalizeHeaderKey("사구") || cell === "hbp");
+  const soIndex = header.findIndex((cell) => cell === normalizeHeaderKey("삼진") || cell === normalizeHeaderKey("탈삼진") || cell === "so");
+  const wpIndex = header.findIndex((cell) => cell === normalizeHeaderKey("폭투") || cell === "wp");
+  const bkIndex = header.findIndex((cell) => cell === normalizeHeaderKey("보크") || cell === "bk");
+  const rIndex = header.findIndex((cell) => cell === normalizeHeaderKey("실점") || cell === "r");
+  const erIndex = header.findIndex((cell) => cell === normalizeHeaderKey("자책점") || cell === normalizeHeaderKey("자책") || cell === "er");
+
+  dataRows.forEach((cells) => {
+    const normalizedCells = normalizePitcherRow(cells);
+    const row = buildRowObject(header, cells);
+    const getFixedOrHeaderCell = (fixedIndex, detectedIndex, aliases) => {
+      const fixedValue = normalizedCells[fixedIndex];
+      if (fixedValue != null && String(fixedValue).trim() !== "" && String(fixedValue).trim() !== "-") {
+        return fixedValue;
+      }
+      if (detectedIndex >= 0) {
+        const detectedValue = cells[detectedIndex];
+        if (detectedValue != null && String(detectedValue).trim() !== "") {
+          return detectedValue;
+        }
+      }
+      return getCellValue(row, aliases);
+    };
+
+    const pitcherLabel = parsePitcherLabel(normalizedCells[0] || getFixedOrHeaderCell(0, nameIndex, ["선수명", "선수", "이름"]));
+    const name = normalizePlayerName(pitcherLabel.originalPlayer || pitcherLabel.player);
+    if (isSummaryName(name)) {
+      return;
+    }
+
+    const rawResultText = String(normalizedCells[1] || getFixedOrHeaderCell(1, resultIndex, ["결과", "wls", "비고"]) || "").trim();
+    const resultText = normalizePitcherResultText(rawResultText);
+    const flaggedFields = [];
+    const parseCountField = (aliases, fieldName) => {
+      const parsed = parseStrictCountCell(getCellValue(row, aliases));
+      if (parsed.suspicious) {
+        flaggedFields.push(fieldName);
+      }
+      return parsed.value;
+    };
+    const parseDirectCount = (value, fieldName) => {
+      const parsed = parseStrictCountCell(value);
+      if (parsed.suspicious) {
+        flaggedFields.push(fieldName);
+      }
+      return parsed.value;
+    };
+
+    const parsed = {
+      player: pitcherLabel.player || findKnownPlayerMatch(name) || name,
+      originalPlayer: cleanPlayerName(pitcherLabel.originalPlayer || name),
+      number: pitcherLabel.number,
+      resultText,
+      ip: parseInningCell(getFixedOrHeaderCell(2, inningIndex, ["이닝", "ip"])),
+      bf: parseDirectCount(getFixedOrHeaderCell(3, bfIndex, ["타자", "상대타자", "bf"]), "타자"),
+      ab: parseDirectCount(getFixedOrHeaderCell(4, abIndex, ["타수", "ab"]), "타수"),
+      h: parseDirectCount(getFixedOrHeaderCell(5, hIndex, ["피안타", "안타", "h"]), "피안타"),
+      hr: parseDirectCount(getFixedOrHeaderCell(6, hrIndex, ["피홈런", "hr"]), "피홈런"),
+      sh: parseDirectCount(getFixedOrHeaderCell(7, shIndex, ["희타", "sh"]), "희타"),
+      sf: parseDirectCount(getFixedOrHeaderCell(8, sfIndex, ["희비", "희생플라이", "sf"]), "희비"),
+      bb: parseDirectCount(getFixedOrHeaderCell(9, bbIndex, ["볼넷", "bb"]), "볼넷"),
+      hbp: parseDirectCount(getFixedOrHeaderCell(10, hbpIndex, ["사구", "hbp"]), "사구"),
+      so: parseDirectCount(getFixedOrHeaderCell(11, soIndex, ["삼진", "탈삼진", "so"]), "삼진"),
+      wp: parseDirectCount(getFixedOrHeaderCell(12, wpIndex, ["폭투", "wp"]), "폭투"),
+      bk: parseDirectCount(getFixedOrHeaderCell(13, bkIndex, ["보크", "bk"]), "보크"),
+      r: parseDirectCount(getFixedOrHeaderCell(14, rIndex, ["실점", "r"]), "실점"),
+      er: parseDirectCount(getFixedOrHeaderCell(15, erIndex, ["자책점", "자책", "er"]), "자책점"),
+      pitchCount: normalizePitchCount(normalizedCells[16]),
+      w: parseCountField(["승", "w"], "승") || (resultText === "승" ? 1 : 0),
+      l: parseCountField(["패", "l"], "패") || (resultText === "패" ? 1 : 0),
+      sv: parseCountField(["세이브", "세", "sv"], "세이브"),
+      hld: parseCountField(["홀드", "hld"], "홀드"),
+    };
+
+    if (Array.isArray(cells) && cells.length !== 19) {
+      flaggedFields.push("컬럼 보정");
+    }
+    if (/^\d+$/.test(rawResultText)) {
+      flaggedFields.push("결과 열 숫자 유입");
+    }
+    if (rawResultText && !/^(승|패|-)$/.test(rawResultText)) {
+      flaggedFields.push("결과 확인");
+    }
+
+    rows.push({
+      ...parsed,
+      era: derivePitchingDisplayStats(parsed).era,
+      _draftFlags: flaggedFields,
     });
   });
 
@@ -1446,6 +2204,10 @@ function parsePitcherRowsFromMatrix(matrix) {
 }
 
 function extractMetaFromRawText(rawText) {
+  const rawLines = String(rawText || "")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
   const text = String(rawText || "")
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
@@ -1454,19 +2216,21 @@ function extractMetaFromRawText(rawText) {
   const dateMatch = text.match(/(20\d{2}[.\-/]\d{1,2}[.\-/]\d{1,2})/);
   const scoreMatch = text.match(/(\d+)\s*[:\-]\s*(\d+)/);
   const opponentMatch = text.match(/(?:vs\.?|상대|상대팀)\s*[:：]?\s*([가-힣A-Za-z0-9\s]+)/i);
+  const titleLine = rawLines.find((line) => /경기|vs|대|라운드|정규시즌|포스트시즌/i.test(line)) || rawLines[0] || "";
 
   return {
     date: dateMatch ? formatRecordDate(dateMatch[1]) : "",
     opponent: opponentMatch ? opponentMatch[1].trim() : "",
     scoreFor: scoreMatch ? parseIntegerCell(scoreMatch[1]) : 0,
     scoreAgainst: scoreMatch ? parseIntegerCell(scoreMatch[2]) : 0,
+    gameTitle: titleLine,
   };
 }
 
 function parseGameOneHtmlOrText(rawText) {
   const htmlBlocks = /<table/i.test(String(rawText || "")) ? extractTableBlocksFromHtml(rawText) : [];
   const textBlocks = extractTableBlocksFromText(rawText);
-  const blocks = [...htmlBlocks, ...textBlocks];
+  const blocks = htmlBlocks.length ? [...htmlBlocks, ...textBlocks] : [...textBlocks, ...htmlBlocks];
   const parsed = {
     rawText: String(rawText || ""),
     meta: extractMetaFromRawText(rawText),
@@ -1504,7 +2268,48 @@ function parseGameOneHtmlOrText(rawText) {
   return parsed;
 }
 
-function normalizeMatchingMap(record, matchingMap = {}) {
+async function fetchGameSourceFromUrl(sourceUrl) {
+  const url = String(sourceUrl || "").trim();
+  if (!url) {
+    throw new Error("게임원 경기결과 URL을 먼저 입력해 주세요.");
+  }
+
+  const response = await fetch(url, {
+    method: "GET",
+    credentials: "omit",
+    headers: {
+      Accept: "text/html,application/xhtml+xml",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`게임원 페이지 응답이 올바르지 않습니다. (${response.status})`);
+  }
+
+  return response.text();
+}
+
+function buildTeamDraftFromSource(year, sourceUrl, rawText, existingDraft = {}) {
+  const parsed = parseGameOneHtmlOrText(rawText);
+  const record = normalizeGameRecord(parsed, {
+    year,
+    sourceUrl,
+    sourceText: rawText,
+    additionalPlayers: existingDraft.pendingRegisteredPlayers || [],
+  });
+
+  return {
+    sourceUrl,
+    rawText,
+    parsedSourceUrl: sourceUrl,
+    parsedRawText: rawText,
+    warnings: parsed.warnings,
+    pendingRegisteredPlayers: existingDraft.pendingRegisteredPlayers || [],
+    record,
+  };
+}
+
+function normalizeMatchingMap(record, matchingMap = {}, additionalPlayers = []) {
   const nextMap = { ...matchingMap };
   const unmatchedNames = new Set();
 
@@ -1513,8 +2318,9 @@ function normalizeMatchingMap(record, matchingMap = {}) {
     if (!original) {
       return;
     }
-    const mapped = normalizePlayerName(nextMap[original] || original);
-    if (!PLAYERS.includes(mapped)) {
+    const explicitMapped = normalizePlayerName(row.player);
+    const mapped = normalizePlayerName(nextMap[original] ?? explicitMapped);
+    if (!mapped || !hasKnownPlayer(mapped, additionalPlayers)) {
       unmatchedNames.add(original);
     } else {
       nextMap[original] = mapped;
@@ -1591,8 +2397,11 @@ function normalizeGameRecord(parsed, options = {}) {
       player: mappedPlayer,
     });
     return {
-      originalPlayer,
+      originalPlayer: cleanPlayerName(originalPlayer),
       player: mappedPlayer,
+      battingOrder: safeNumberLocal(row.battingOrder),
+      pos: row.pos || row.position || "",
+      number: row.number ?? "",
       pa: safeNumberLocal(row.pa),
       ab: safeNumberLocal(row.ab),
       h: safeNumberLocal(row.h),
@@ -1612,15 +2421,18 @@ function normalizeGameRecord(parsed, options = {}) {
       obp: row.obp || display.obp,
       slg: row.slg || display.slg,
       ops: row.ops || display.ops,
+      _draftFlags: Array.isArray(row._draftFlags) ? [...row._draftFlags] : [],
     };
   });
 
   const mappedPitchers = rawPitchers.map((row) => {
-    const originalPlayer = normalizePlayerName(row.originalPlayer || row.player);
-    const mappedPlayer = normalizePlayerName(options.matchingMap?.[originalPlayer] || row.player);
+    const originalPlayer = cleanPlayerName(normalizePlayerName(row.originalPlayer || row.player));
+    const mappedPlayer = cleanPlayerName(normalizePlayerName(options.matchingMap?.[originalPlayer] || row.player));
     return {
       originalPlayer,
       player: mappedPlayer,
+      number: row.number ?? "",
+      resultText: normalizePitcherResultText(row.resultText || row.result || ""),
       ip: parseInningCell(row.ip),
       ipDisplay: formatFractionalInnings(parseInningCell(row.ip)),
       bf: safeNumberLocal(row.bf),
@@ -1636,7 +2448,9 @@ function normalizeGameRecord(parsed, options = {}) {
       l: safeNumberLocal(row.l),
       sv: safeNumberLocal(row.sv),
       hld: safeNumberLocal(row.hld),
+      pitchCount: normalizePitchCount(row.pitchCount ?? row.pitches ?? row.np),
       era: row.era || derivePitchingDisplayStats({ ...row, ip: parseInningCell(row.ip) }).era,
+      _draftFlags: Array.isArray(row._draftFlags) ? [...row._draftFlags] : [],
     };
   });
 
@@ -1644,6 +2458,7 @@ function normalizeGameRecord(parsed, options = {}) {
     id: "",
     year,
     date: formatRecordDate(options.date || parsed?.meta?.date || parsed?.date || ""),
+    gameTitle: String(options.gameTitle || parsed?.meta?.gameTitle || parsed?.gameTitle || "").trim(),
     opponent: String(options.opponent || parsed?.meta?.opponent || parsed?.opponent || "").trim(),
     scoreFor: safeNumberLocal(options.scoreFor ?? parsed?.meta?.scoreFor ?? parsed?.scoreFor ?? 0),
     scoreAgainst: safeNumberLocal(options.scoreAgainst ?? parsed?.meta?.scoreAgainst ?? parsed?.scoreAgainst ?? 0),
@@ -1665,7 +2480,7 @@ function normalizeGameRecord(parsed, options = {}) {
   record.result = record.result || computeResult(record.scoreFor, record.scoreAgainst);
   record.id = buildGameRecordId(record);
 
-  const matching = normalizeMatchingMap(record, record.matchingMap);
+  const matching = normalizeMatchingMap(record, record.matchingMap, options.additionalPlayers || []);
   record.matchingMap = matching.matchingMap;
   record.unmatchedPlayers = matching.unmatchedPlayers;
 
@@ -1773,6 +2588,160 @@ function saveGameRecord(record, options = {}) {
   };
 }
 
+function removeGameRecord(gameId) {
+  const record = gameRecords.find((entry) => entry.id === gameId);
+  if (!record || !isEditableYear(record.year)) {
+    return false;
+  }
+
+  gameRecords = gameRecords.filter((entry) => entry.id !== gameId);
+  removeGameLogsByGameId(gameId);
+  persistGameStorage();
+  return true;
+}
+
+function getAppliedGameHistory(year) {
+  return getTeamRecordsByYear(year);
+}
+
+function sanitizeDraftInteger(value) {
+  return parseStrictCountCell(value).value;
+}
+
+function sanitizeDraftText(value) {
+  return String(value ?? "").trim();
+}
+
+function isWholeNumberValue(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && Number.isInteger(numeric);
+}
+
+function getBatterDraftIssues(row) {
+  const issues = [];
+  if (!sanitizeDraftText(row.originalPlayer || row.player)) {
+    issues.push("선수명 없음");
+  }
+  if (!sanitizeDraftText(row.player)) {
+    issues.push("매칭 필요");
+  }
+  if (!isWholeNumberValue(row.pa) || !isWholeNumberValue(row.ab) || !isWholeNumberValue(row.h) || !isWholeNumberValue(row.bb) || !isWholeNumberValue(row.hbp)) {
+    issues.push("정수 확인");
+  }
+  if (row._draftFlags?.length) {
+    issues.push(`${row._draftFlags.join(", ")} 값 확인`);
+  }
+  if (safeNumberLocal(row.ab) > safeNumberLocal(row.pa)) {
+    issues.push("타수>타석");
+  }
+  if (safeNumberLocal(row.h) > safeNumberLocal(row.ab)) {
+    issues.push("안타>타수");
+  }
+  if (safeNumberLocal(row.d2) + safeNumberLocal(row.d3) + safeNumberLocal(row.hr) > safeNumberLocal(row.h)) {
+    issues.push("장타 합계 확인");
+  }
+  return issues;
+}
+
+function getPitcherDraftIssues(row) {
+  const issues = [];
+  if (!sanitizeDraftText(row.originalPlayer || row.player)) {
+    issues.push("선수명 없음");
+  }
+  if (!sanitizeDraftText(row.player)) {
+    issues.push("매칭 필요");
+  }
+  if (!isWholeNumberValue(row.bf) || !isWholeNumberValue(row.ab) || !isWholeNumberValue(row.h) || !isWholeNumberValue(row.bb) || !isWholeNumberValue(row.hbp)) {
+    issues.push("정수 확인");
+  }
+  if (row._draftFlags?.length) {
+    issues.push(`${row._draftFlags.join(", ")} 값 확인`);
+  }
+  if (safeNumberLocal(row.h) > safeNumberLocal(row.ab) && safeNumberLocal(row.ab) > 0) {
+    issues.push("피안타>타수");
+  }
+  return issues;
+}
+
+function getPitcherDraftIssues(row) {
+  const issues = [];
+  if (!sanitizeDraftText(row.originalPlayer || row.player)) {
+    issues.push("선수명 없음");
+  }
+  if (!sanitizeDraftText(row.player)) {
+    issues.push("매칭 필요");
+  }
+  if (!isWholeNumberValue(row.bf) || !isWholeNumberValue(row.ab) || !isWholeNumberValue(row.h) || !isWholeNumberValue(row.bb) || !isWholeNumberValue(row.hbp)) {
+    issues.push("정수 확인");
+  }
+  if (!/^(승|패|-)$/.test(sanitizeDraftText(row.resultText || "-") || "-")) {
+    issues.push("결과 확인");
+  }
+  if (row._draftFlags?.length) {
+    issues.push(`${row._draftFlags.join(", ")} 값 확인`);
+  }
+  if (safeNumberLocal(row.h) > safeNumberLocal(row.ab) && safeNumberLocal(row.ab) > 0) {
+    issues.push("피안타>타수");
+  }
+  return issues;
+}
+
+function getDraftRecordIssues(record) {
+  const issues = [];
+  if (!sanitizeDraftText(record.date)) {
+    issues.push({ level: "warning", text: "경기 날짜를 확인해 주세요." });
+  }
+  if (!sanitizeDraftText(record.opponent)) {
+    issues.push({ level: "warning", text: "상대팀을 확인해 주세요." });
+  }
+  if (!sanitizeDraftText(record.gameTitle)) {
+    issues.push({ level: "info", text: "경기명은 비어 있어도 저장할 수 있지만 확인해 두는 것이 좋습니다." });
+  }
+  if (record.unmatchedPlayers?.length) {
+    issues.push({ level: "warning", text: `매칭되지 않은 선수 ${record.unmatchedPlayers.length}명이 있습니다.` });
+  }
+  if (!record.playerBattingRows.length && !record.pitcherRows.length) {
+    issues.push({ level: "warning", text: "타자/투수 기록이 모두 비어 있습니다." });
+  }
+
+  record.playerBattingRows.forEach((row) => {
+    const rowIssues = getBatterDraftIssues(row);
+    if (rowIssues.length) {
+      issues.push({ level: "warning", text: `${row.originalPlayer || row.player}: ${rowIssues.join(", ")}` });
+    }
+  });
+
+  record.pitcherRows.forEach((row) => {
+    const rowIssues = getPitcherDraftIssues(row);
+    if (rowIssues.length) {
+      issues.push({ level: "warning", text: `${row.originalPlayer || row.player}: ${rowIssues.join(", ")}` });
+    }
+  });
+
+  return issues;
+}
+
+function renderDraftIssueSummary(record, warnings = []) {
+  const issues = [...warnings.map((text) => ({ level: "warning", text })), ...getDraftRecordIssues(record)];
+  if (!issues.length) {
+    return `
+      <div class="team-import-review ok">
+        <h4>검토 결과</h4>
+        <p>현재 확인된 누락/의심 항목이 없습니다. 내용을 다시 확인한 뒤 통산 반영을 진행할 수 있습니다.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="team-import-review">
+      <h4>검토 필요 항목</h4>
+      <ul>
+        ${issues.map((issue) => `<li class="${issue.level === "info" ? "info" : "warning"}">${escapeHtml(issue.text)}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+}
+
 function getRankingGuideStats() {
   const rows = getVisibleCareerHitterRows();
   const totals = rows.reduce(
@@ -1796,8 +2765,8 @@ function getRankingGuideStats() {
   );
 
   const teamGames = getCareerTeamGames();
-  const requiredPA = Math.ceil(teamGames * 2.7);
-  const requiredIP = teamGames * 1.0;
+  const requiredPA = Math.ceil(teamGames * 1.5);
+  const requiredIP = 2;
   const avg = totals.ab ? totals.h / totals.ab : 0;
   const obpDenominator = totals.ab + totals.bb + totals.hbp + totals.sf;
   const obp = obpDenominator ? (totals.h + totals.bb + totals.hbp) / obpDenominator : 0;
@@ -1817,6 +2786,25 @@ function getRankingGuideStats() {
 
 function isQualifiedBatter(row) {
   return safeNumberLocal(row.pa) >= getRankingGuideStats().requiredPA;
+}
+
+function isQualifiedPitcher(row) {
+  return safeNumberLocal(row.ip) >= getRankingGuideStats().requiredIP;
+}
+
+function renderRankingTeamAverage() {
+  const guide = getRankingGuideStats();
+  const withLeadingZero = (value) => {
+    const text = String(value ?? ".000");
+    return text.startsWith(".") ? `0${text}` : text;
+  };
+
+  return `
+    <section class="ranking-summary" aria-label="팀평균">
+      <h3>팀평균</h3>
+      <p>타율 ${withLeadingZero(guide.avg)} / 출루율 ${withLeadingZero(guide.obp)} / 장타율 ${withLeadingZero(guide.slg)} / OPS ${withLeadingZero(guide.ops)}</p>
+    </section>
+  `;
 }
 
 function renderRankingGuide() {
@@ -2305,6 +3293,7 @@ function renderGameRecordDetail(record) {
   return `
     <div class="team-record-detail">
       <div class="team-record-detail-meta">
+        <span>경기명 ${escapeHtml(record.gameTitle || "-")}</span>
         <span>${sourceUrl}</span>
         <span>원문 보관 ${record.sourceText ? "완료" : "없음"}</span>
       </div>
@@ -2415,10 +3404,10 @@ function renderTeamRecordTable(year) {
   `;
 }
 
-function buildMatchingOptions(selected) {
+function buildMatchingOptions(selected, extraPlayers = []) {
   return [
     `<option value="">선수 선택</option>`,
-    ...PLAYERS.map((player) => `<option value="${escapeHtml(player)}"${player === selected ? " selected" : ""}>${player}</option>`),
+    ...getKnownPlayers(extraPlayers).map((player) => `<option value="${escapeHtml(player)}"${player === selected ? " selected" : ""}>${player}</option>`),
   ].join("");
 }
 
@@ -2426,46 +3415,244 @@ function isEditableYear(year) {
   return Number(year) === 2026;
 }
 
+function renderDraftSourceView(year, draft) {
+  if (!draft.rawText && !draft.sourceUrl) {
+    return "";
+  }
+
+  return `
+    <section class="team-import-source">
+      <div class="team-import-preview-header">
+        <h3>원본 보기</h3>
+        <p>붙여넣은 원문은 자동 파싱 결과와 별도로 그대로 보관됩니다.</p>
+      </div>
+      <div class="team-import-source-meta">
+        <span>URL: ${draft.sourceUrl ? `<a href="${escapeHtml(draft.sourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(draft.sourceUrl)}</a>` : "없음"}</span>
+        <span>원문 길이: ${String(draft.rawText || "").length}자</span>
+      </div>
+      <textarea id="team-raw-preview-${year}" class="team-source-viewer" rows="10" readonly>${escapeHtml(draft.rawText || "")}</textarea>
+    </section>
+  `;
+}
+
+function renderDraftMatchControls(year, rowType, rowIndex, originalName, selectedName, draft) {
+  const normalizedOriginal = normalizePlayerName(originalName);
+  const additionalPlayers = draft?.pendingRegisteredPlayers || [];
+  const autoMatch = hasKnownPlayer(normalizedOriginal, additionalPlayers) ? normalizedOriginal : "";
+
+  return `
+    <div class="team-match-controls">
+      <select data-player-match="${escapeHtml(normalizedOriginal)}" data-row-type="${rowType}" data-row-index="${rowIndex}">
+        ${buildMatchingOptions(selectedName, additionalPlayers)}
+      </select>
+      <div class="team-inline-actions">
+        <button type="button" data-match-edit="${rowType}:${rowIndex}">수정</button>
+        <button type="button" data-match-reset="${rowType}:${rowIndex}" data-auto-match="${escapeHtml(autoMatch)}">초기화</button>
+        <button type="button" data-match-clear="${rowType}:${rowIndex}">미매칭으로 되돌리기</button>
+        <button type="button" data-match-register="${rowType}:${rowIndex}" data-original-name="${escapeHtml(normalizedOriginal)}">신규 등록</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderEditableBatterDraftTable(year, record, draft) {
+  const rowsHtml = (record.playerBattingRows || [])
+    .map((row, index) => {
+      const issues = getBatterDraftIssues(row);
+      const className = issues.length ? "needs-review" : "";
+      const displayStats = deriveBattingDisplayStats(row);
+      return `
+        <tr class="${className}" data-batter-row="${index}">
+          <td>${escapeHtml(row.originalPlayer || row.player || "")}</td>
+          <td><input data-batter-field="battingOrder" data-row-index="${index}" type="number" min="1" step="1" value="${safeNumberLocal(row.battingOrder)}"></td>
+          <td><input data-batter-field="pos" data-row-index="${index}" type="text" value="${escapeHtml(row.pos || "")}"></td>
+          <td><input data-batter-field="number" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.number)}"></td>
+          <td>${renderDraftMatchControls(year, "batter", index, row.originalPlayer || row.player, row.player, draft)}</td>
+          <td><input data-batter-field="pa" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.pa)}"></td>
+          <td><input data-batter-field="ab" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.ab)}"></td>
+          <td><input data-batter-field="h" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.h)}"></td>
+          <td><input data-batter-field="d2" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.d2)}"></td>
+          <td><input data-batter-field="d3" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.d3)}"></td>
+          <td><input data-batter-field="hr" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.hr)}"></td>
+          <td><input data-batter-field="rbi" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.rbi)}"></td>
+          <td><input data-batter-field="r" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.r)}"></td>
+          <td><input data-batter-field="sb" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.sb)}"></td>
+          <td><input data-batter-field="bb" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.bb)}"></td>
+          <td><input data-batter-field="hbp" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.hbp)}"></td>
+          <td><input data-batter-field="so" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.so)}"></td>
+          <td><input data-batter-field="sf" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.sf)}"></td>
+          <td><input data-batter-field="sh" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.sh)}"></td>
+          <td>${displayStats.avg}</td>
+          <td>${displayStats.obp}</td>
+          <td>${displayStats.slg}</td>
+          <td>${displayStats.ops}</td>
+          <td>${issues.length ? `<span class="draft-issue-badge">확인 필요</span>` : `<span class="draft-ok-badge">확인 완료</span>`}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="table-wrap">
+      <table class="stats-table draft-edit-table">
+        <thead>
+          <tr>
+            <th>원본 선수명</th>
+            <th>타순</th>
+            <th>포지션</th>
+            <th>등번호</th>
+            <th>매칭 선수명</th>
+            <th>타석</th>
+            <th>타수</th>
+            <th>안타</th>
+            <th>2루타</th>
+            <th>3루타</th>
+            <th>홈런</th>
+            <th>타점</th>
+            <th>득점</th>
+            <th>도루</th>
+            <th>볼넷</th>
+            <th>사구</th>
+            <th>삼진</th>
+            <th>희생플라이</th>
+            <th>희생번트</th>
+            <th>AVG</th>
+            <th>OBP</th>
+            <th>SLG</th>
+            <th>OPS</th>
+            <th>상태</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml || `<tr><td colspan="24">자동 변환된 타자 기록이 없습니다.</td></tr>`}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderEditablePitcherDraftTable(year, record, draft) {
+  const rowsHtml = (record.pitcherRows || [])
+    .map((row, index) => {
+      const issues = getPitcherDraftIssues(row);
+      const className = issues.length ? "needs-review" : "";
+      const displayStats = derivePitchingDisplayStats(row);
+      return `
+        <tr class="${className}" data-pitcher-row="${index}">
+          <td>${escapeHtml(row.originalPlayer || row.player || "")}</td>
+          <td><input data-pitcher-field="number" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.number)}"></td>
+          <td>${renderDraftMatchControls(year, "pitcher", index, row.originalPlayer || row.player, row.player, draft)}</td>
+          <td><input data-pitcher-field="resultText" data-row-index="${index}" type="text" value="${escapeHtml(row.resultText || "")}"></td>
+          <td><input data-pitcher-field="ip" data-row-index="${index}" type="text" value="${escapeHtml(row.ipDisplay || formatFractionalInnings(row.ip))}"></td>
+          <td><input data-pitcher-field="bf" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.bf)}"></td>
+          <td><input data-pitcher-field="ab" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.ab)}"></td>
+          <td><input data-pitcher-field="h" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.h)}"></td>
+          <td><input data-pitcher-field="hr" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.hr)}"></td>
+          <td><input data-pitcher-field="bb" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.bb)}"></td>
+          <td><input data-pitcher-field="hbp" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.hbp)}"></td>
+          <td><input data-pitcher-field="so" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.so)}"></td>
+          <td><input data-pitcher-field="r" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.r)}"></td>
+          <td><input data-pitcher-field="er" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.er)}"></td>
+          <td><input data-pitcher-field="w" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.w)}"></td>
+          <td><input data-pitcher-field="l" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.l)}"></td>
+          <td><input data-pitcher-field="sv" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.sv)}"></td>
+          <td><input data-pitcher-field="hld" data-row-index="${index}" type="number" min="0" step="1" value="${safeNumberLocal(row.hld)}"></td>
+          <td><input data-pitcher-field="pitchCount" data-row-index="${index}" type="text" value="${escapeHtml(normalizePitchCount(row.pitchCount))}"></td>
+          <td>${displayStats.era}</td>
+          <td>${issues.length ? `<span class="draft-issue-badge">확인 필요</span>` : `<span class="draft-ok-badge">확인 완료</span>`}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="table-wrap">
+      <table class="stats-table draft-edit-table">
+        <thead>
+          <tr>
+            <th>원본 선수명</th>
+            <th>등번호</th>
+            <th>매칭 선수명</th>
+            <th>결과</th>
+            <th>이닝</th>
+            <th>타자</th>
+            <th>타수</th>
+            <th>피안타</th>
+            <th>피홈런</th>
+            <th>볼넷</th>
+            <th>사구</th>
+            <th>탈삼진</th>
+            <th>실점</th>
+            <th>자책</th>
+            <th>승</th>
+            <th>패</th>
+            <th>세이브</th>
+            <th>홀드</th>
+            <th>투구수</th>
+            <th>ERA</th>
+            <th>상태</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml || `<tr><td colspan="21">자동 변환된 투수 기록이 없습니다.</td></tr>`}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderAppliedHistory(year) {
+  if (!isEditableYear(year)) {
+    return "";
+  }
+
+  const records = getAppliedGameHistory(year);
+  return `
+    <section class="team-history-panel">
+      <div class="team-import-preview-header">
+        <h3>반영 이력</h3>
+        <p>이미 통산에 반영된 경기입니다. 필요하면 경기 단위로 취소할 수 있습니다.</p>
+      </div>
+      ${
+        records.length
+          ? `<div class="team-history-list">
+              ${records
+                .map(
+                  (record) => `
+                    <div class="team-history-item">
+                      <div>
+                        <strong>${escapeHtml(formatDateForDisplay(record.date))}</strong>
+                        <span>${escapeHtml(record.opponent || "-")} · ${safeNumberLocal(record.scoreFor)}:${safeNumberLocal(record.scoreAgainst)}</span>
+                      </div>
+                      <div class="team-inline-actions">
+                        <button type="button" data-edit-game="${record.id}">수정 불러오기</button>
+                        <button type="button" data-undo-game="${record.id}">이번 경기 반영 취소</button>
+                      </div>
+                    </div>
+                  `
+                )
+                .join("")}
+            </div>`
+          : `<div class="placeholder-panel"><p>아직 통산에 반영된 2026 경기 기록이 없습니다.</p></div>`
+      }
+    </section>
+  `;
+}
+
 function renderTeamImportPreview(year) {
-  const draft = teamImportDrafts[year];
-  if (!draft?.record) {
+  const draft = getTeamImportDraft(year);
+  if (!draft?.record || (!draft.record.playerBattingRows.length && !draft.record.pitcherRows.length && !draft.rawText)) {
     return "";
   }
 
   const record = draft.record;
   const duplicate = getExistingGameRecord(record);
-  const hasUnmatched = record.unmatchedPlayers.length > 0;
-  const matchingMarkup = hasUnmatched
-    ? `
-      <section class="team-import-match">
-        <h4>선수명 매칭 필요</h4>
-        <div class="team-match-grid">
-          ${record.unmatchedPlayers
-            .map((name) => `
-              <label class="team-match-item">
-                <span>${escapeHtml(name)}</span>
-                <select data-player-match="${escapeHtml(name)}">
-                  ${buildMatchingOptions(record.matchingMap?.[name] || "")}
-                </select>
-              </label>
-            `)
-            .join("")}
-        </div>
-      </section>
-    `
-    : "";
-
-  const battingPreview = buildGameLogDetailRows(record, "batter");
-  const pitcherPreview = buildGameLogDetailRows(record, "pitcher");
 
   return `
     <section class="team-import-preview">
       <div class="team-import-preview-header">
-        <h3>변환 미리보기</h3>
-        <p>${duplicate ? "이미 저장된 경기입니다. 저장하면 기존 경기 데이터를 덮어씁니다." : "저장 전에 날짜, 상대팀, 스코어와 선수명 매칭을 확인해 주세요."}</p>
+        <h3>자동 변환 초안 확인</h3>
+        <p>${duplicate ? "이미 반영된 경기입니다. 다시 반영하면 기존 경기 기록을 덮어씁니다." : "자동 파싱 결과는 초안입니다. 매칭과 기록을 직접 수정한 뒤 통산 반영을 진행해 주세요."}</p>
       </div>
       <div class="team-edit-grid">
         <label><span>경기 날짜</span><input id="team-record-date-${year}" type="date" value="${escapeHtml(record.date)}"></label>
+        <label><span>경기명</span><input id="team-record-title-${year}" type="text" value="${escapeHtml(record.gameTitle || "")}" placeholder="예: 정규시즌 3차전"></label>
         <label><span>상대팀</span><input id="team-record-opponent-${year}" type="text" value="${escapeHtml(record.opponent)}" placeholder="상대팀"></label>
         <label><span>득점</span><input id="team-record-score-for-${year}" type="number" min="0" value="${safeNumberLocal(record.scoreFor)}"></label>
         <label><span>실점</span><input id="team-record-score-against-${year}" type="number" min="0" value="${safeNumberLocal(record.scoreAgainst)}"></label>
@@ -2473,27 +3660,28 @@ function renderTeamImportPreview(year) {
         <label><span>실책</span><input id="team-record-errors-${year}" type="number" min="0" value="${safeNumberLocal(record.teamBattingSummary?.errors)}"></label>
         <label class="team-edit-wide"><span>비고</span><input id="team-record-notes-${year}" type="text" value="${escapeHtml(record.teamBattingSummary?.notes || "")}" placeholder="비고"></label>
       </div>
-      ${matchingMarkup}
-      ${draft.warnings?.length ? `<div class="team-import-warnings">${draft.warnings.map((warning) => `<p>${escapeHtml(warning)}</p>`).join("")}</div>` : ""}
+      ${renderDraftSourceView(year, draft)}
+      ${renderDraftIssueSummary(record, draft.warnings)}
       <div class="team-import-preview-tables">
         <section class="team-detail-block">
-          <h4>선수 타격기록 미리보기</h4>
-          <div class="table-wrap">${battingPreview.length ? createTableMarkup(gameLogBatterColumns, battingPreview) : `<div class="placeholder-panel"><p>타격기록 표를 찾지 못했습니다.</p></div>`}</div>
+          <h4>선수 타격기록 초안</h4>
+          ${renderEditableBatterDraftTable(year, record, draft)}
         </section>
         <section class="team-detail-block">
-          <h4>투수기록 미리보기</h4>
-          <div class="table-wrap">${pitcherPreview.length ? createTableMarkup(gameLogPitcherColumns, pitcherPreview) : `<div class="placeholder-panel"><p>투수기록 표를 찾지 못했습니다.</p></div>`}</div>
+          <h4>투수기록 초안</h4>
+          ${renderEditablePitcherDraftTable(year, record, draft)}
         </section>
       </div>
       <div class="team-import-actions">
-        <button id="team-save-button-${year}" type="button"${hasUnmatched ? " disabled" : ""}>${duplicate ? "덮어쓰기 저장" : "저장"}</button>
+        <button id="team-save-button-${year}" data-action="save-2026-game-record" data-year="${year}" type="button">${duplicate ? "2026 경기 기록 덮어쓰기 저장" : "2026 경기 기록으로 저장"}</button>
+        <button id="team-clear-draft-button-${year}" type="button" class="secondary">초안 삭제</button>
       </div>
     </section>
   `;
 }
 
 function collectTeamDraftFromInputs(year) {
-  const draft = teamImportDrafts[year];
+  const draft = getTeamImportDraft(year);
   if (!draft?.record) {
     return null;
   }
@@ -2504,27 +3692,126 @@ function collectTeamDraftFromInputs(year) {
   document.querySelectorAll("[data-player-match]").forEach((select) => {
     if (select.value) {
       matchingMap[select.dataset.playerMatch] = select.value;
+    } else {
+      delete matchingMap[select.dataset.playerMatch];
     }
   });
 
-  const baseRecord =
-    currentSourceUrl !== (draft.sourceUrl || "") || currentRawText !== (draft.rawText || "")
-      ? normalizeGameRecord(parseGameOneHtmlOrText(currentRawText), {
-          year,
-          sourceUrl: currentSourceUrl,
-          sourceText: currentRawText,
-          matchingMap,
-        })
-      : draft.record;
+  const batterRows = Array.from(document.querySelectorAll("[data-batter-row]")).map((rowElement, index) => {
+    const originalPlayer = sanitizeDraftText(
+      draft.record.playerBattingRows[index]?.originalPlayer || draft.record.playerBattingRows[index]?.player || ""
+    );
+    const mappedPlayer = sanitizeDraftText(
+      rowElement.querySelector(`[data-row-type="batter"][data-row-index="${index}"]`)?.value || matchingMap[originalPlayer] || ""
+    );
+    const flaggedFields = [];
+    const numericValue = (field, label) => {
+      const parsed = parseStrictCountCell(
+        rowElement.querySelector(`[data-batter-field="${field}"][data-row-index="${index}"]`)?.value
+      );
+      if (parsed.suspicious) {
+        flaggedFields.push(label);
+      }
+      return parsed.value;
+    };
+    const row = {
+      originalPlayer,
+      player: mappedPlayer,
+      battingOrder: numericValue("battingOrder", "타순"),
+      pos: sanitizeDraftText(rowElement.querySelector(`[data-batter-field="pos"][data-row-index="${index}"]`)?.value),
+      number: numericValue("number", "등번호"),
+      pa: numericValue("pa", "타석"),
+      ab: numericValue("ab", "타수"),
+      h: numericValue("h", "안타"),
+      d2: numericValue("d2", "2루타"),
+      d3: numericValue("d3", "3루타"),
+      hr: numericValue("hr", "홈런"),
+      rbi: numericValue("rbi", "타점"),
+      r: numericValue("r", "득점"),
+      sb: numericValue("sb", "도루"),
+      bb: numericValue("bb", "볼넷"),
+      hbp: numericValue("hbp", "사구"),
+      so: numericValue("so", "삼진"),
+      sf: numericValue("sf", "희생플라이"),
+      sh: numericValue("sh", "희생번트"),
+    };
+    const display = deriveBattingDisplayStats({
+      ...row,
+      tb: Math.max(0, row.h - row.d2 - row.d3 - row.hr) + row.d2 * 2 + row.d3 * 3 + row.hr * 4,
+    });
+    return {
+      ...row,
+      tb: display.tb,
+      avg: display.avg,
+      obp: display.obp,
+      slg: display.slg,
+      ops: display.ops,
+      _draftFlags: flaggedFields,
+    };
+  });
+
+  const pitcherRows = Array.from(document.querySelectorAll("[data-pitcher-row]")).map((rowElement, index) => {
+    const originalPlayer = sanitizeDraftText(
+      draft.record.pitcherRows[index]?.originalPlayer || draft.record.pitcherRows[index]?.player || ""
+    );
+    const mappedPlayer = cleanPlayerName(sanitizeDraftText(
+      rowElement.querySelector(`[data-row-type="pitcher"][data-row-index="${index}"]`)?.value || matchingMap[originalPlayer] || ""
+    ));
+    const flaggedFields = [];
+    const numericValue = (field, label) => {
+      const parsed = parseStrictCountCell(
+        rowElement.querySelector(`[data-pitcher-field="${field}"][data-row-index="${index}"]`)?.value
+      );
+      if (parsed.suspicious) {
+        flaggedFields.push(label);
+      }
+      return parsed.value;
+    };
+    const rawIp = sanitizeDraftText(
+      rowElement.querySelector(`[data-pitcher-field="ip"][data-row-index="${index}"]`)?.value
+    );
+    const ip = parseInningCell(rawIp);
+    const display = derivePitchingDisplayStats({ ip, er: numericValue("er"), h: numericValue("h"), bb: numericValue("bb") });
+    return {
+      originalPlayer,
+      player: mappedPlayer,
+      number: numericValue("number", "등번호"),
+      resultText: normalizePitcherResultText(sanitizeDraftText(
+        rowElement.querySelector(`[data-pitcher-field="resultText"][data-row-index="${index}"]`)?.value
+      )),
+      ip,
+      ipDisplay: rawIp || formatFractionalInnings(ip),
+      bf: numericValue("bf", "타자"),
+      ab: numericValue("ab", "타수"),
+      h: numericValue("h", "피안타"),
+      hr: numericValue("hr", "피홈런"),
+      bb: numericValue("bb", "볼넷"),
+      hbp: numericValue("hbp", "사구"),
+      so: numericValue("so", "탈삼진"),
+      r: numericValue("r", "실점"),
+      er: numericValue("er", "자책"),
+      w: numericValue("w", "승"),
+      l: numericValue("l", "패"),
+      sv: numericValue("sv", "세이브"),
+      hld: numericValue("hld", "홀드"),
+      pitchCount: normalizePitchCount(
+        rowElement.querySelector(`[data-pitcher-field="pitchCount"][data-row-index="${index}"]`)?.value
+      ),
+      era: display.era,
+      _draftFlags: flaggedFields,
+    };
+  });
 
   return normalizeGameRecord(
     {
-      ...baseRecord,
+      ...draft.record,
       sourceUrl: currentSourceUrl,
       sourceText: currentRawText,
       rawText: currentRawText,
+      playerBattingRows: batterRows,
+      pitcherRows,
       teamBattingSummary: {
-        ...(baseRecord.teamBattingSummary || createEmptyTeamBattingSummary()),
+        ...(draft.record.teamBattingSummary || createEmptyTeamBattingSummary()),
         risp: document.getElementById(`team-record-risp-${year}`)?.value || "",
         errors: document.getElementById(`team-record-errors-${year}`)?.value || 0,
         notes: document.getElementById(`team-record-notes-${year}`)?.value || "",
@@ -2534,40 +3821,228 @@ function collectTeamDraftFromInputs(year) {
       year,
       sourceUrl: currentSourceUrl,
       sourceText: currentRawText,
-      date: document.getElementById(`team-record-date-${year}`)?.value || baseRecord.date,
-      opponent: document.getElementById(`team-record-opponent-${year}`)?.value || baseRecord.opponent,
-      scoreFor: document.getElementById(`team-record-score-for-${year}`)?.value || baseRecord.scoreFor,
-      scoreAgainst: document.getElementById(`team-record-score-against-${year}`)?.value || baseRecord.scoreAgainst,
+      date: document.getElementById(`team-record-date-${year}`)?.value || draft.record.date,
+      gameTitle: document.getElementById(`team-record-title-${year}`)?.value || draft.record.gameTitle || "",
+      opponent: document.getElementById(`team-record-opponent-${year}`)?.value || draft.record.opponent,
+      scoreFor: document.getElementById(`team-record-score-for-${year}`)?.value || draft.record.scoreFor,
+      scoreAgainst: document.getElementById(`team-record-score-against-${year}`)?.value || draft.record.scoreAgainst,
       teamBattingSummary: {
-        ...(baseRecord.teamBattingSummary || createEmptyTeamBattingSummary()),
+        ...(draft.record.teamBattingSummary || createEmptyTeamBattingSummary()),
         risp: document.getElementById(`team-record-risp-${year}`)?.value || "",
         errors: document.getElementById(`team-record-errors-${year}`)?.value || 0,
         notes: document.getElementById(`team-record-notes-${year}`)?.value || "",
       },
       matchingMap,
-      createdAt: baseRecord.createdAt,
+      additionalPlayers: draft.pendingRegisteredPlayers || [],
+      createdAt: draft.record.createdAt,
     }
   );
 }
 
+function refreshAfter2026Save(year = "2026") {
+  recalculateCareerStatsFromGameLogs();
+
+  if (typeof renderTeamYear === "function") {
+    renderTeamYear(String(year));
+  }
+  if (typeof renderPlayerYear === "function") {
+    renderPlayerYear("2026");
+  }
+  if (typeof renderCareerPage === "function") {
+    renderCareerPage(state.totalType || "hitter");
+  }
+  if (typeof renderCareerRanking === "function") {
+    renderCareerRanking();
+  }
+  if (typeof renderCurrentPage === "function") {
+    renderCurrentPage();
+  }
+}
+
+function save2026GameRecord(year = "2026") {
+  try {
+    const targetYear = String(year || "2026");
+    const record = collectTeamDraftFromInputs(targetYear);
+    if (!record) {
+      teamPageNotices[targetYear] = "2026 경기 기록 저장 중 오류가 발생했습니다.";
+      console.error("[watchdogs] save2026GameRecord: draft record missing");
+      renderTeamYear(targetYear);
+      return false;
+    }
+
+    const currentSourceUrl = document.getElementById(`team-url-input-${targetYear}`)?.value?.trim() || "";
+    const currentRawText = document.getElementById(`team-raw-input-${targetYear}`)?.value || "";
+    const draft = getTeamImportDraft(targetYear);
+
+    if (draft && (currentSourceUrl !== (draft.parsedSourceUrl || "") || currentRawText !== (draft.parsedRawText || ""))) {
+      const reparsed = parseGameOneHtmlOrText(currentRawText);
+      const refreshedRecord = normalizeGameRecord(reparsed, {
+        year: targetYear,
+        sourceUrl: currentSourceUrl,
+        sourceText: currentRawText,
+        additionalPlayers: draft.pendingRegisteredPlayers || [],
+      });
+      saveTeamImportDraft(targetYear, {
+        sourceUrl: currentSourceUrl,
+        rawText: currentRawText,
+        parsedSourceUrl: currentSourceUrl,
+        parsedRawText: currentRawText,
+        warnings: reparsed.warnings,
+        pendingRegisteredPlayers: draft.pendingRegisteredPlayers || [],
+        record: refreshedRecord,
+      });
+      teamPageNotices[targetYear] = "URL 또는 표 원문이 변경되어 미리보기를 갱신했습니다. 내용을 확인한 뒤 다시 저장해 주세요.";
+      renderTeamYear(targetYear);
+      return false;
+    }
+
+    if (!record.date || !String(record.opponent || "").trim()) {
+      teamPageNotices[targetYear] = "경기 날짜와 상대팀을 먼저 입력해 주세요.";
+      renderTeamYear(targetYear);
+      return false;
+    }
+
+    if (!String(record.sourceUrl || "").trim()) {
+      teamPageNotices[targetYear] = "게임원 경기결과 URL을 먼저 입력해 주세요.";
+      renderTeamYear(targetYear);
+      return false;
+    }
+
+    if (!record.playerBattingRows.length && !record.pitcherRows.length) {
+      teamPageNotices[targetYear] = "저장할 선수 기록이 없습니다. 표 원문을 확인해 주세요.";
+      renderTeamYear(targetYear);
+      return false;
+    }
+
+    if (record.unmatchedPlayers.length) {
+      saveTeamImportDraft(targetYear, {
+        ...draft,
+        record,
+      });
+      teamPageNotices[targetYear] = "저장 전에 모든 선수명을 기존 선수와 매칭해 주세요.";
+      renderTeamYear(targetYear);
+      return false;
+    }
+
+    const result = saveGameRecord(record, { overwrite: Boolean(getExistingGameRecord(record)) });
+    if (!result.saved) {
+      teamPageNotices[targetYear] = result.readOnly
+        ? "과거 시즌은 수정할 수 없습니다."
+        : "이미 저장된 경기입니다. 확인 후 다시 저장해 주세요.";
+      console.error("[watchdogs] save2026GameRecord: saveGameRecord rejected", result);
+      renderTeamYear(targetYear);
+      return false;
+    }
+
+    (draft?.pendingRegisteredPlayers || []).forEach((name) => ensureRegisteredPlayer(name));
+    clearTeamImportDraft(targetYear);
+    teamPageNotices[targetYear] = "2026 경기 기록이 저장되었습니다.";
+    refreshAfter2026Save(targetYear);
+    console.log("[watchdogs] 2026 game record saved", {
+      id: result.record?.id || record.id,
+      duplicated: result.duplicated,
+      year: targetYear,
+      date: record.date,
+      opponent: record.opponent,
+    });
+    if (typeof window !== "undefined" && typeof window.alert === "function") {
+      window.alert("2026 경기 기록이 저장되었습니다.");
+    }
+    return true;
+  } catch (error) {
+    console.error("[watchdogs] 2026 경기 기록 저장 중 오류", error);
+    teamPageNotices[String(year || "2026")] = "2026 경기 기록 저장 중 오류가 발생했습니다.";
+    if (typeof renderTeamYear === "function") {
+      renderTeamYear(String(year || "2026"));
+    }
+    if (typeof window !== "undefined" && typeof window.alert === "function") {
+      window.alert("2026 경기 기록 저장 중 오류가 발생했습니다.");
+    }
+    return false;
+  }
+}
+
 function bindTeamYearActions(year) {
   if (isEditableYear(year)) {
+    const persistDraftFromDom = () => {
+      const existingDraft = getTeamImportDraft(year);
+      const hasPreview =
+        Boolean(existingDraft.record?.playerBattingRows?.length) ||
+        Boolean(existingDraft.record?.pitcherRows?.length) ||
+        Boolean(existingDraft.record?.date) ||
+        Boolean(existingDraft.record?.opponent);
+
+      if (hasPreview) {
+        const record = collectTeamDraftFromInputs(year);
+        if (record) {
+          saveTeamImportDraft(year, {
+            ...existingDraft,
+            sourceUrl: document.getElementById(`team-url-input-${year}`)?.value?.trim() || existingDraft.sourceUrl || "",
+            rawText: document.getElementById(`team-raw-input-${year}`)?.value || existingDraft.rawText || "",
+            record,
+            warnings: existingDraft.warnings || [],
+            parsedSourceUrl: existingDraft.parsedSourceUrl || "",
+            parsedRawText: existingDraft.parsedRawText || "",
+          });
+        }
+        return;
+      }
+
+      saveTeamImportDraft(year, {
+        ...existingDraft,
+        sourceUrl: document.getElementById(`team-url-input-${year}`)?.value?.trim() || "",
+        rawText: document.getElementById(`team-raw-input-${year}`)?.value || "",
+        parsedSourceUrl: existingDraft.parsedSourceUrl || "",
+        parsedRawText: existingDraft.parsedRawText || "",
+      });
+    };
+
+    document.getElementById(`team-url-fetch-button-${year}`)?.addEventListener("click", async () => {
+      const sourceUrl = document.getElementById(`team-url-input-${year}`)?.value?.trim() || "";
+      const currentRawText = document.getElementById(`team-raw-input-${year}`)?.value || "";
+      const existingDraft = getTeamImportDraft(year);
+      if (!sourceUrl) {
+        teamPageNotices[year] = "게임원 경기결과 URL을 먼저 입력해 주세요.";
+        renderTeamYear(year);
+        return;
+      }
+
+      saveTeamImportDraft(year, {
+        ...existingDraft,
+        sourceUrl,
+        rawText: currentRawText,
+      });
+      teamPageNotices[year] = "게임원 URL에서 기록을 불러오는 중입니다...";
+      renderTeamYear(year);
+
+      try {
+        const rawText = await fetchGameSourceFromUrl(sourceUrl);
+        saveTeamImportDraft(year, buildTeamDraftFromSource(year, sourceUrl, rawText, existingDraft));
+        teamPageNotices[year] = "게임원 URL에서 기록을 불러왔습니다. 초안을 확인해 주세요.";
+        renderTeamYear(year);
+      } catch (error) {
+        saveTeamImportDraft(year, {
+          ...existingDraft,
+          sourceUrl,
+          rawText: currentRawText || existingDraft.rawText || "",
+        });
+        teamPageNotices[year] = `URL 자동 불러오기에 실패했습니다. ${error?.message || "브라우저 보안(CORS) 또는 페이지 접근 제한일 수 있습니다."} 표 원문 붙여넣기로 이어서 진행해 주세요.`;
+        renderTeamYear(year);
+      }
+    });
+
     document.getElementById(`team-parse-button-${year}`)?.addEventListener("click", () => {
       const sourceUrl = document.getElementById(`team-url-input-${year}`)?.value?.trim() || "";
       const rawText = document.getElementById(`team-raw-input-${year}`)?.value || "";
-      const parsed = parseGameOneHtmlOrText(rawText);
-      const record = normalizeGameRecord(parsed, {
-        year,
-        sourceUrl,
-        sourceText: rawText,
-      });
-
-      teamImportDrafts[year] = {
-        sourceUrl,
-        rawText,
-        warnings: parsed.warnings,
-        record,
-      };
+      const existingDraft = getTeamImportDraft(year);
+      if (!rawText.trim()) {
+        teamPageNotices[year] = sourceUrl
+          ? "표 원문이 비어 있습니다. URL 자동 불러오기를 먼저 시도하거나, 표 원문을 붙여넣어 주세요."
+          : "게임원 URL 자동 불러오기 또는 표 원문 붙여넣기 중 하나가 필요합니다.";
+        renderTeamYear(year);
+        return;
+      }
+      saveTeamImportDraft(year, buildTeamDraftFromSource(year, sourceUrl, rawText, existingDraft));
       teamPageNotices[year] = "";
       renderTeamYear(year);
     });
@@ -2580,14 +4055,24 @@ function bindTeamYearActions(year) {
 
       const currentSourceUrl = document.getElementById(`team-url-input-${year}`)?.value?.trim() || "";
       const currentRawText = document.getElementById(`team-raw-input-${year}`)?.value || "";
-      const draft = teamImportDrafts[year];
-      if (draft && (currentSourceUrl !== (draft.sourceUrl || "") || currentRawText !== (draft.rawText || ""))) {
-        teamImportDrafts[year] = {
+      const draft = getTeamImportDraft(year);
+      if (draft && (currentSourceUrl !== (draft.parsedSourceUrl || "") || currentRawText !== (draft.parsedRawText || ""))) {
+        const reparsed = parseGameOneHtmlOrText(currentRawText);
+        const refreshedRecord = normalizeGameRecord(reparsed, {
+          year,
+          sourceUrl: currentSourceUrl,
+          sourceText: currentRawText,
+          additionalPlayers: draft.pendingRegisteredPlayers || [],
+        });
+        saveTeamImportDraft(year, {
           sourceUrl: currentSourceUrl,
           rawText: currentRawText,
-          warnings: parseGameOneHtmlOrText(currentRawText).warnings,
-          record,
-        };
+          parsedSourceUrl: currentSourceUrl,
+          parsedRawText: currentRawText,
+          warnings: reparsed.warnings,
+          pendingRegisteredPlayers: draft.pendingRegisteredPlayers || [],
+          record: refreshedRecord,
+        });
         teamPageNotices[year] = "URL 또는 표 원문이 변경되어 미리보기를 갱신했습니다. 내용을 확인한 뒤 다시 저장해 주세요.";
         renderTeamYear(year);
         return;
@@ -2599,6 +4084,12 @@ function bindTeamYearActions(year) {
         return;
       }
 
+      if (!String(record.sourceUrl || "").trim()) {
+        teamPageNotices[year] = "게임원 경기결과 URL을 함께 입력해 주세요.";
+        renderTeamYear(year);
+        return;
+      }
+
       if (!record.playerBattingRows.length && !record.pitcherRows.length) {
         teamPageNotices[year] = "저장할 선수 기록이 없습니다. 표 원문을 확인해 주세요.";
         renderTeamYear(year);
@@ -2606,7 +4097,10 @@ function bindTeamYearActions(year) {
       }
 
       if (record.unmatchedPlayers.length) {
-        teamImportDrafts[year].record = record;
+        saveTeamImportDraft(year, {
+          ...draft,
+          record,
+        });
         teamPageNotices[year] = "저장 전에 모든 선수명을 기존 선수와 매칭해 주세요.";
         renderTeamYear(year);
         return;
@@ -2622,8 +4116,15 @@ function bindTeamYearActions(year) {
       }
 
       recalculateCareerStatsFromGameLogs();
+      (draft.pendingRegisteredPlayers || []).forEach((name) => ensureRegisteredPlayer(name));
       teamPageNotices[year] = result.duplicated ? "기존 경기 기록을 덮어썼습니다." : "경기 기록을 저장했습니다.";
-      delete teamImportDrafts[year];
+      clearTeamImportDraft(year);
+      renderTeamYear(year);
+    });
+
+    document.getElementById(`team-clear-draft-button-${year}`)?.addEventListener("click", () => {
+      clearTeamImportDraft(year);
+      teamPageNotices[year] = "작성 중인 초안을 삭제했습니다.";
       renderTeamYear(year);
     });
 
@@ -2633,11 +4134,139 @@ function bindTeamYearActions(year) {
         if (!record) {
           return;
         }
-        teamImportDrafts[year].record = record;
+        saveTeamImportDraft(year, {
+          ...getTeamImportDraft(year),
+          record,
+        });
         renderTeamYear(year);
       });
     });
+
+    document.querySelectorAll("[data-match-edit]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const [rowType, rowIndex] = String(button.dataset.matchEdit || "").split(":");
+        document
+          .querySelector(`[data-row-type="${rowType}"][data-row-index="${rowIndex}"]`)
+          ?.focus();
+      });
+    });
+
+    document.querySelectorAll("[data-match-reset]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const [rowType, rowIndex] = String(button.dataset.matchReset || "").split(":");
+        const select = document.querySelector(`[data-row-type="${rowType}"][data-row-index="${rowIndex}"]`);
+        if (!select) {
+          return;
+        }
+        select.value = button.dataset.autoMatch || "";
+        const record = collectTeamDraftFromInputs(year);
+        if (record) {
+          saveTeamImportDraft(year, { ...getTeamImportDraft(year), record });
+          renderTeamYear(year);
+        }
+      });
+    });
+
+    document.querySelectorAll("[data-match-clear]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const [rowType, rowIndex] = String(button.dataset.matchClear || "").split(":");
+        const select = document.querySelector(`[data-row-type="${rowType}"][data-row-index="${rowIndex}"]`);
+        if (!select) {
+          return;
+        }
+        select.value = "";
+        const record = collectTeamDraftFromInputs(year);
+        if (record) {
+          saveTeamImportDraft(year, { ...getTeamImportDraft(year), record });
+          renderTeamYear(year);
+        }
+      });
+    });
+
+    document.querySelectorAll("[data-match-register]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const originalName = normalizePlayerName(button.dataset.originalName || "");
+        const draftState = getTeamImportDraft(year);
+        const [rowType, rowIndex] = String(button.dataset.matchRegister || "").split(":");
+        const select = document.querySelector(`[data-row-type="${rowType}"][data-row-index="${rowIndex}"]`);
+        if (!select || !originalName) {
+          return;
+        }
+        const pendingRegisteredPlayers = Array.from(new Set([...(draftState.pendingRegisteredPlayers || []), originalName]));
+        select.innerHTML = buildMatchingOptions(originalName, pendingRegisteredPlayers);
+        select.value = originalName;
+        const record = collectTeamDraftFromInputs(year);
+        if (record) {
+          saveTeamImportDraft(year, { ...draftState, pendingRegisteredPlayers, record });
+          teamPageNotices[year] = `${originalName} 선수를 신규 등록 후보로 추가했습니다. 내용을 확인한 뒤 통산 반영을 진행해 주세요.`;
+          renderTeamYear(year);
+        }
+      });
+    });
+
+    document.querySelectorAll(
+      [
+        "[data-batter-field]",
+        "[data-pitcher-field]",
+        `#team-url-input-${year}`,
+        `#team-raw-input-${year}`,
+        `#team-record-date-${year}`,
+        `#team-record-title-${year}`,
+        `#team-record-opponent-${year}`,
+        `#team-record-score-for-${year}`,
+        `#team-record-score-against-${year}`,
+        `#team-record-risp-${year}`,
+        `#team-record-errors-${year}`,
+        `#team-record-notes-${year}`,
+      ].join(", ")
+    ).forEach((input) => {
+      input.addEventListener("input", persistDraftFromDom);
+      input.addEventListener("change", persistDraftFromDom);
+    });
   }
+
+  document.querySelectorAll("[data-edit-game]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const gameId = button.dataset.editGame;
+      const record = gameRecords.find((entry) => entry.id === gameId);
+      if (!record) {
+        return;
+      }
+
+      saveTeamImportDraft(year, {
+        sourceUrl: record.sourceUrl || "",
+        rawText: record.sourceText || "",
+        parsedSourceUrl: record.sourceUrl || "",
+        parsedRawText: record.sourceText || "",
+        record,
+        warnings: [],
+      });
+      teamPageNotices[year] = "저장된 경기 기록을 초안으로 불러왔습니다. 수정 후 다시 저장하면 덮어쓰기 됩니다.";
+      renderTeamYear(year);
+    });
+  });
+
+  document.querySelectorAll("[data-undo-game]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const gameId = button.dataset.undoGame;
+      const target = gameRecords.find((entry) => entry.id === gameId);
+      if (!target) {
+        return;
+      }
+      const approved = typeof window !== "undefined" && typeof window.confirm === "function"
+        ? window.confirm(`${formatDateForDisplay(target.date)} ${target.opponent} 경기 반영을 취소할까요?`)
+        : true;
+      if (!approved) {
+        return;
+      }
+
+      if (removeGameRecord(gameId)) {
+        recalculateCareerStatsFromGameLogs();
+        teamPageNotices[year] = "선택한 경기 반영을 취소했습니다.";
+        renderTeamYear(year);
+      }
+    });
+  });
 
   document.querySelectorAll("[data-toggle-game]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -2658,13 +4287,13 @@ function renderTeamYear(year) {
   const notice = teamPageNotices[year]
     ? `<div class="team-notice">${escapeHtml(teamPageNotices[year])}</div>`
     : "";
-  const draft = teamImportDrafts[year];
+  const draft = getTeamImportDraft(year);
 
   container.innerHTML = `
     <section class="page team-page">
       <div class="page-header">
         <h2>팀기록 ${year}</h2>
-        <p>${editable ? "게임원 경기결과 주소와 표 원문을 붙여넣어 연도별 팀기록과 선수 경기 로그를 누적 저장합니다." : "과거 시즌은 고정 데이터만 조회할 수 있습니다."}</p>
+        <p>${editable ? "게임원 기록은 자동 반영이 아니라 초안 생성까지만 진행됩니다. 원본 확인과 수정 후 통산 반영을 진행해 주세요." : "과거 시즌은 고정 데이터만 조회할 수 있습니다."}</p>
       </div>
       ${notice || (!editable ? `<div class="team-notice">2022~2025 시즌은 기록 보존용 데이터로 수정할 수 없습니다.</div>` : "")}
       ${
@@ -2672,8 +4301,8 @@ function renderTeamYear(year) {
           ? `
       <section class="team-import-panel">
         <div class="team-import-header">
-          <h3>게임원 경기결과 불러오기</h3>
-          <p>현재는 URL만으로 자동 수집하지 않고, URL과 표 원문 붙여넣기 방식으로 먼저 저장합니다.</p>
+          <h3>게임원 기록 붙여넣기</h3>
+          <p>먼저 게임원 URL 자동 불러오기를 시도하고, 실패하면 표 원문 붙여넣기로 초안을 만들 수 있습니다.</p>
         </div>
         <div class="team-import-form">
           <label class="team-edit-wide">
@@ -2685,11 +4314,13 @@ function renderTeamYear(year) {
             <textarea id="team-raw-input-${year}" rows="10" placeholder="게임원 경기결과 페이지에서 표 영역을 복사해 붙여넣어 주세요.">${escapeHtml(draft?.rawText || "")}</textarea>
           </label>
           <div class="team-import-actions">
-            <button id="team-parse-button-${year}" type="button">변환 미리보기</button>
+            <button id="team-url-fetch-button-${year}" type="button">URL 자동 불러오기 시도</button>
+            <button id="team-parse-button-${year}" type="button">기록표 생성</button>
           </div>
         </div>
         ${renderTeamImportPreview(year)}
       </section>
+      ${renderAppliedHistory(year)}
       `
           : ""
       }
@@ -2715,6 +4346,91 @@ function renderTotal() {
 
 function renderCareerRanking() {
   renderRank(state.rankType);
+}
+
+function renderRankingGuide() {
+  const guide = getRankingGuideStats();
+
+  return `
+    <section class="ranking-guide" aria-label="통산순위 기준 안내">
+      <div class="ranking-guide-header">
+        <h3>통산순위 기준 안내</h3>
+        <p>통산순위는 통산기록 누적 원자료를 기준으로 계산하며, 2026 경기 저장분도 같은 방식으로 자동 합산됩니다.</p>
+      </div>
+      <div class="ranking-guide-grid">
+        <article class="ranking-guide-card">
+          <h4>기준 계산</h4>
+          <ul class="ranking-guide-list">
+            <li>팀 총 경기 수: ${guide.teamGames}경기</li>
+            <li>타자 규정타석: 팀 경기 수 × 1.5 = ${guide.requiredPA}타석</li>
+            <li>투수 규정이닝: 고정 ${guide.requiredIP}이닝</li>
+          </ul>
+        </article>
+        <article class="ranking-guide-card">
+          <h4>지표 설명</h4>
+          <ul class="ranking-guide-list">
+            <li>RC: Runs Created. 타자의 출루와 장타 생산력을 바탕으로 득점 기여도를 추정한 지표입니다.</li>
+            <li>RC/18: 18아웃 기준 RC 환산값입니다. 경기당 생산력을 비교하기 쉽게 만든 보정 지표입니다.</li>
+            <li>XR: Extrapolated Runs. 안타, 장타, 볼넷 등 공격 이벤트별 가중치를 적용해 예상 득점 생산력을 계산한 지표입니다.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function buildRankingEntries(rows, config, type) {
+  const qualificationChecker =
+    type === "hitter"
+      ? isQualifiedBatter
+      : type === "pitcher" && config.separateQualification
+        ? isQualifiedPitcher
+        : null;
+
+  if (qualificationChecker && config.separateQualification) {
+    const qualifiedRows = rows.filter((row) => qualificationChecker(row));
+    const underQualifiedRows = rows.filter((row) => !qualificationChecker(row));
+
+    const qualifiedEntries = buildCompetitiveRankEntries(qualifiedRows, config, { qualified: true });
+    const lastQualifiedRank = qualifiedEntries.length ? qualifiedEntries[qualifiedEntries.length - 1].rank : 0;
+    const underQualifiedEntries = buildCompetitiveRankEntries(underQualifiedRows, config, {
+      qualified: false,
+      underQualified: true,
+      rankOffset: lastQualifiedRank,
+    });
+
+    if (!underQualifiedEntries.length) {
+      return insertTopTenSeparator(qualifiedEntries);
+    }
+
+    return insertTopTenSeparator([
+      ...qualifiedEntries,
+      createSeparatorEntry("qualification-divider", type === "pitcher" ? "규정이닝 미달" : "규정타석 미달"),
+      ...underQualifiedEntries,
+    ]);
+  }
+
+  const rankedEntries = buildCompetitiveRankEntries(rows, config, {
+    qualified: qualificationChecker || undefined,
+    highlightQualified:
+      (type === "hitter" && config.qualificationHighlight) ||
+      (type === "pitcher" && config.qualificationHighlight),
+    underQualified: false,
+  }).map((entry) => {
+    if (((type === "hitter") || (type === "pitcher")) && config.qualificationHighlight && qualificationChecker) {
+      const targetRow = rows.find((row) => row.name === entry.name) || {};
+      const qualified = qualificationChecker(targetRow);
+      return {
+        ...entry,
+        qualified,
+        highlightQualified: qualified,
+        underQualified: !qualified,
+      };
+    }
+    return entry;
+  });
+
+  return insertTopTenSeparator(rankedEntries);
 }
 
 function renderRank(type) {
@@ -2760,6 +4476,7 @@ function renderRank(type) {
         <p>기존 통산값과 저장된 경기 로그를 합산한 통산기록표 기준 항목별 순위입니다.</p>
       </div>
       ${renderRankingGuide()}
+      ${renderRankingTeamAverage()}
       <div class="ranking-grid">
         ${blocksHtml}
       </div>
@@ -2840,10 +4557,34 @@ function initTotalClicks() {
   });
 }
 
+function bindGlobalSaveDelegation() {
+  document.addEventListener(
+    "click",
+    (event) => {
+      const saveButton = event.target.closest('[data-action="save-2026-game-record"]');
+      if (!saveButton) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation();
+      }
+
+      const year = saveButton.dataset.year || "2026";
+      saveButton.disabled = false;
+      save2026GameRecord(year);
+    },
+    true
+  );
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initMenuClicks();
   initYearClicks();
   initTotalClicks();
   initRankClicks();
+  bindGlobalSaveDelegation();
   renderCurrentPage();
 });
